@@ -1,0 +1,25 @@
+# Satır sonu davranışını makineden bağımsız sabitler.
+# Bu dosya olmadan sonuç, her geliştiricinin core.autocrlf ayarına bağlı olur.
+
+# Metin dosyaları depoda LF olarak saklanır.
+* text=auto eol=lf
+
+# Windows'a özgü betikler CRLF ister.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# İkili dosyalar - Git bunlara hiç dokunmamalı.
+*.mat binary
+*.zip binary
+*.npy binary
+*.npz binary
+*.joblib binary
+*.pt binary
+*.ckpt binary
+*.png binary
+*.jpg binary
+*.pdf binary
+
+# Defterler satır bazlı diff'te okunmaz; yine de metin olarak tutulsun.
+*.ipynb text eol=lf

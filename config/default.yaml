@@ -54,6 +54,37 @@ nasa:
   wear_unit: mm
   use_for_training: false
 
+  # 2026-08-27'de inen veriden doğrulandı:
+  #   167 koşu, 146'sında VB etiketi var, 16 vaka
+  #   koşu başına 9000 örnek × 6 kanal
+  #   VB aralığı 0.00 - 1.53 mm  (üst değerler ISO sınırının çok üstünde, aykırı)
+  #   material kodu: 1 = dökme demir, 2 = çelik
+  sampling_rate_hz: 250
+  samples_per_run: 9000
+  spindle_rpm: 826
+
+  # Vaka 6'da tek koşu var - bilinen veri düzensizliği, kullanılabilir değil.
+  known_bad_cases: [6]
+
+# ---------------------------------------------------------------- Transfer
+# Faz 07'nin temel kısıtı: iki veri setinin frekans bantları ÖRTÜŞMÜYOR.
+#
+#   PHM 2010 : iğ 173,3 Hz  |  diş geçişi 520 Hz  |  Nyquist 25.000 Hz
+#   NASA     : iğ  13,8 Hz  |                     |  Nyquist    125 Hz
+#
+# PHM'in bilgi taşıyan bandı (173 Hz ve üstü) NASA'da fiziksel olarak
+# temsil edilemiyor. Dolayısıyla ham sinyali yeniden örnekleyip transfer
+# etmek mümkün değil.
+#
+# Çözüm: frekans yerine MERTEBE (order) alanında çalışmak. Öznitelikler
+# iğ frekansının katları olarak tanımlanırsa iki tezgâh karşılaştırılabilir
+# hale gelir. NASA'nın izin verdiği üst sınır 125 / 13,8 ≈ 9 mertebe,
+# bu yüzden transfer denemesi ilk 8 mertebeyle sınırlı.
+transfer:
+  domain: order            # frekans değil, iğ frekansının katları
+  max_order: 8
+  channels: [vibration, acoustic_emission]
+
 # ---------------------------------------------------------------- Değerlendirme
 evaluation:
   # Kesici bazında bölme. Rastgele pencere bölmesi sızıntı yaratır:
