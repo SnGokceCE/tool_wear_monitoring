@@ -1,0 +1,28 @@
+# veri
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# deney çıktıları
+runs/
+reports/figures/*
+!reports/figures/.gitkeep
+*.ckpt
+*.pt
+*.joblib
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# editör / işletim sistemi
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

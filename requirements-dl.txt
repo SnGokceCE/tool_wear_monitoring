@@ -1,0 +1,3 @@
+# Faz 05'te kurulur. Ayrı tutulmasının sebebi: Faz 00-04 arası
+# derin öğrenmeye ihtiyaç duymuyor ve torch kurulumu ağır.
+torch>=2.6

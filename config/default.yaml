@@ -1,0 +1,77 @@
+# Projenin tek yapılandırma kaynağı.
+# Sabitleri koda gömmüyoruz: hem raporda tek yerden okunabilsin,
+# hem de veri setinden doğrulandıkça buradan güncellensin.
+
+paths:
+  data_raw: data/raw
+  data_processed: data/processed
+  runs: runs
+  reports: reports
+
+# ---------------------------------------------------------------- PHM 2010
+# Birincil veri seti. Eğitim ve ana sonuçlar burada üretilir.
+phm2010:
+  root: data/raw/phm2010
+
+  # Etiketli kesiciler. c2, c3, c5 etiketsiz olduğu için denetimli
+  # çalışmada kullanılamaz (ileride yarı-denetimli denenirse işe yarayabilir).
+  labelled_cutters: [c1, c4, c6]
+  unlabelled_cutters: [c2, c3, c5]
+
+  # Sinyal kanalları — ham csv'deki sütun sırası.
+  channels: [force_x, force_y, force_z, vib_x, vib_y, vib_z, ae_rms]
+
+  # Ortak kanallar: NASA'ya transfer denemesinde (Faz 07) yalnızca bunlar
+  # kullanılabilir, çünkü NASA'da kuvvet sensörü yok.
+  shared_channels: [vib_x, vib_y, vib_z, ae_rms]
+
+  sampling_rate_hz: 50000
+
+  # Kesme koşulu. Faz 02'de veriden doğrulanacak; özellikle flutes
+  # (ağız sayısı) etiket dosyasındaki sütun sayısından teyit edilmeli.
+  spindle_rpm: 10400
+  flutes: 3
+  feed_mm_per_min: 1555
+  depth_of_cut_axial_mm: 0.2
+  material: "paslanmaz çelik"
+
+  # Etiket birimi: wear.csv değerleri 10^-3 mm, yani mikrometre.
+  wear_unit: um
+  # Ağızlar arası birleştirme. "max" = VBmax, literatürdeki standart.
+  # "mean" alternatifi ölçüm gürültüsüne karşı daha kararlı olabilir;
+  # ikisi de raporlanacak.
+  wear_aggregation: max
+
+# ---------------------------------------------------------------- NASA
+# İkincil veri seti. Eğitimde KULLANILMAZ - Faz 07'deki genelleme
+# sınavı için ayrılmıştır. Bu kural bilerek konmuştur: eğitime
+# katıldığı anda sınav geçersiz olur.
+nasa:
+  root: data/raw/nasa_milling
+  mat_file: mill.mat
+  channels: [smcAC, smcDC, vib_table, vib_spindle, AE_table, AE_spindle]
+  shared_channels: [vib_table, vib_spindle, AE_table, AE_spindle]
+  wear_unit: mm
+  use_for_training: false
+
+# ---------------------------------------------------------------- Değerlendirme
+evaluation:
+  # Kesici bazında bölme. Rastgele pencere bölmesi sızıntı yaratır:
+  # komşu pencereler neredeyse aynıdır, model ezberler.
+  split: leave_one_cutter_out
+
+  # Aşınma sınırı. PHM 2010 deneyleri bu değerde sonlandırılmıştır.
+  # (ISO 8688'in genel kriteri 300 um'dir; burada veri setinin kendi sınırı geçerli.)
+  wear_limit_um: 150
+
+  metrics: [mae_um, rmse_um, crossing_delay_cuts]
+
+# ---------------------------------------------------------------- Kabul kriterleri
+# Faz 00'da sabitlendi. Model bunları geçmiyorsa sisteme girmez.
+acceptance:
+  max_mae_um: 15.0
+  max_crossing_delay_cuts: 5
+  # Naif taban her iki metrikte de geçilmek zorunda.
+  must_beat_naive_baseline: true
+
+random_seed: 42
