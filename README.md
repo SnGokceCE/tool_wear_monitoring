@@ -8,7 +8,7 @@ Yol haritası: https://claude.ai/code/artifact/395988f2-9463-43ae-b252-62984fe32
 
 | Faz | İş | Durum |
 |-----|----|-------|
-| 00 | Kurulum, değerlendirme çatısı, naif taban | devam ediyor |
+| 00 | Kurulum, değerlendirme çatısı, naif taban | **tamamlandı** |
 | 01 | Derin literatür taraması | — |
 | 02 | Veri hattı ve keşifsel analiz | — |
 | 03 | Değerlendirme çatısı | — |
@@ -32,6 +32,27 @@ değerlendirme kodu doğrudan oradan okur.
    **5 geçişten fazla gecikmeden** yakalama.
 3. **Taban çizgisi** — Her model, sinyale hiç bakmayan naif tabanı (geçiş sayısından
    izotonik tahmin) her iki metrikte de geçmek zorundadır. Geçemeyen model sisteme girmez.
+
+### Naif taban sonucu (27 Ağustos 2026)
+
+`python scripts/run_naive_baseline.py` çıktısı, leave-one-cutter-out:
+
+| Katlama | MAE (µm) | RMSE (µm) | Gecikme (geçiş) | Ağız saçılımı (µm) |
+|---------|---------:|----------:|----------------:|-------------------:|
+| test=c1 |    13,18 |     19,38 |             −27 |              10,26 |
+| test=c4 |    20,67 |     22,43 |             −30 |               7,88 |
+| test=c6 |    29,61 |     33,27 |             +47 |              20,48 |
+
+Ortalama MAE **21,15 µm**, ortalama |gecikme| **34,7 geçiş**, en kötü gecikme **+47**.
+
+İki not:
+
+- Gecikmelerin **işaretli** ortalaması −3,33 çıkıyor ama bu yanıltıcı: erken ve geç
+  alarmlar birbirini götürüyor. Karar için anlamlı olan mutlak ortalama ve en kötü
+  değerdir; script her üçünü de basar.
+- Kabul hedefi 15 µm, ağızlar arası saçılımın (12,87 µm ortalama, c6'da 20,5 µm)
+  yakınında. Bu saçılım saf ölçüm gürültüsü değil — ağızlar gerçekten farklı aşınıyor —
+  ama etiketin kendi değişkenliği bu mertebede. Sonuçlar raporlanırken birlikte verilmeli.
 
 ## Kurulum
 

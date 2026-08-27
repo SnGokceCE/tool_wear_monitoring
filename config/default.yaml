@@ -27,8 +27,15 @@ phm2010:
 
   sampling_rate_hz: 50000
 
-  # Kesme koşulu. Faz 02'de veriden doğrulanacak; özellikle flutes
-  # (ağız sayısı) etiket dosyasındaki sütun sayısından teyit edilmeli.
+  # 2026-08-27'de inen veriden doğrulandı:
+  #   6 kesici × 315 geçiş; c1, c4, c6 etiketli (315'er etiket = 945)
+  #   ağız sayısı 3 (wear dosyasında flute_1..3)
+  #   geçiş dosyası 127.399 satır × 7 kanal ≈ 2,55 s @ 50 kHz
+  #   VB üç kesicide de monoton artıyor - izotonik varsayım geçerli
+  #   VB tepe değerleri: c1 172,7 / c4 210,9 / c6 234,7 um
+  #     -> "deneyler 150 um'de sonlandırıldı" bilgisi bu dosyalar için doğru
+  #        değil; 150 um bir EŞİK seçimi, veri onun ötesine geçiyor.
+  #   ağızlar arası saçılım ortalaması: c1 10,3 / c4 7,9 / c6 20,5 um
   spindle_rpm: 10400
   flutes: 3
   feed_mm_per_min: 1555

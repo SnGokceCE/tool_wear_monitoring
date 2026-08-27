@@ -81,21 +81,34 @@ def main(argv: list[str] | None = None) -> int:
 
     mean_mae = results["mae_um"].mean()
     mean_delay = results["crossing_delay_cuts"].mean()
+    mean_abs_delay = results["crossing_delay_cuts"].abs().mean()
+    worst_delay = results["crossing_delay_cuts"].max()
     mean_spread = results["flute_spread_um"].mean()
 
-    print(f"\nOrtalama MAE          : {mean_mae:.2f} um")
-    print(f"Ortalama gecikme      : {mean_delay:+.2f} geçiş")
-    print(f"Ağızlar arası saçılım : {mean_spread:.2f} um  (ölçüm taban gürültüsü)")
+    print(f"\nOrtalama MAE            : {mean_mae:.2f} um")
+    # İşaretli ortalama yanıltıcıdır: erken ve geç alarmlar birbirini götürür.
+    # Karar için anlamlı olan mutlak ortalama ve en kötü gecikmedir.
+    print(f"Ortalama |gecikme|      : {mean_abs_delay:.2f} geçiş")
+    print(f"En kötü gecikme         : {worst_delay:+.0f} geçiş")
+    print(f"İşaretli ortalama       : {mean_delay:+.2f} geçiş  (yanıltıcı - bilgi için)")
+    print(f"Ağızlar arası saçılım   : {mean_spread:.2f} um")
 
     target_mae = float(config.get("acceptance.max_mae_um", 15.0))
     print(
         f"\nHedef MAE < {target_mae:.0f} um. Naif taban {mean_mae:.2f} um -> "
         f"modelin geçmesi gereken çizgi bu."
     )
-    if mean_mae < mean_spread:
+    target_delay = float(config.get("acceptance.max_crossing_delay_cuts", 5))
+    print(
+        f"Hedef |gecikme| <= {target_delay:.0f} geçiş. Naif taban {mean_abs_delay:.1f} geçiş."
+    )
+
+    if target_mae < mean_spread:
         print(
-            "[uyarı] Naif tabanın hatası ölçüm gürültüsünün altında. "
-            "Bu veri setinde iyileştirme payı dar; sonuçları buna göre yorumlayın."
+            f"\n[uyarı] Kabul hedefi ({target_mae:.0f} um) ağızlar arası saçılımın "
+            f"({mean_spread:.1f} um) altında. Saçılım saf ölçüm gürültüsü değil - "
+            "ağızlar gerçekten farklı aşınıyor - ama etiketin kendi değişkenliği "
+            "bu mertebede. Hedefi savunurken bunu birlikte raporlayın."
         )
 
     if args.save:
