@@ -21,13 +21,33 @@ MAX_ATTEMPTS = 5
 # requests'in düşmesinin sebebi buydu.
 HEADERS = {"User-Agent": "tcm-dataset-downloader/0.1 (+https://phmsociety.org)"}
 
-PHM2010_INSTRUCTIONS = """
-PHM 2010 otomatik indirilemiyor - kaynak erişim için kayıt istiyor.
+KAGGLE_DATASET = "rabahba/phm-data-challenge-2010"
 
-Kaynaklar:
-  1. PHM Society  https://phmsociety.org/phm_competition/2010-phm-society-conference-data-challenge/
-  2. IEEE DataPort https://ieee-dataport.org/documents/phm2010-dataset
-  3. Kaggle aynası  "PHM 2010 milling" araması
+PHM2010_INSTRUCTIONS = """
+PHM 2010 otomatik indirilemiyor - ücretsiz de olsa hesap gerektiriyor.
+
+Kaynaklar (27 Ağustos 2026'da kontrol edildi):
+
+  1. Kaggle - ÖNERİLEN
+     https://www.kaggle.com/datasets/{kaggle}
+     Ücretsiz hesap gerekiyor. Tarayıcıdan indirilebilir; ya da API belirteci
+     kurulduysa:
+         pip install kaggle
+         kaggle datasets download -d {kaggle} -p data/raw/phm2010 --unzip
+
+  2. IEEE DataPort
+     https://ieee-dataport.org/documents/phm2010-dataset
+     Abonelik isteyebiliyor.
+
+  3. PHM Society resmi sayfası
+     https://phmsociety.org/phm_competition/2010-phm-society-conference-data-challenge/
+     DİKKAT: Sayfadaki c1.zip / c4.zip / c6.zip bağlantıları ARTIK ÖLÜ -
+     CDN kök sayfasına yönlendirip zip yerine HTML döndürüyorlar.
+     Sayfa yine de deney koşullarının resmi kaynağı olarak değerli.
+
+Bize yalnızca ETİKETLİ kesiciler gerekiyor: c1, c4, c6 (yarışmada eğitim
+kümesiydi). c2, c3, c5 etiketsiz. Not: c3'ün aşınma dosyasının hatalı olduğu
+resmi sayfada belirtiliyor - zaten kullanmıyoruz.
 
 İndirdikten sonra arşivi şuraya açın:
 
@@ -76,7 +96,9 @@ def download_nasa(target_dir: str | Path, force: bool = False) -> Path:
 
 def phm2010_instructions(target_dir: str | Path) -> str:
     """PHM 2010 için elle yerleştirme talimatı."""
-    return PHM2010_INSTRUCTIONS.format(target=Path(target_dir).resolve())
+    return PHM2010_INSTRUCTIONS.format(
+        target=Path(target_dir).resolve(), kaggle=KAGGLE_DATASET
+    )
 
 
 def verify(phm_root: str | Path, nasa_root: str | Path) -> bool:
