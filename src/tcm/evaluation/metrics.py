@@ -62,16 +62,47 @@ def crossing_delay_cuts(
     return float(pred_idx - true_idx)
 
 
+def alarm_overshoot_um(
+    y_true: ArrayLike,
+    y_pred: ArrayLike,
+    threshold: float,
+) -> float:
+    """Alarm geldiğinde gerçek aşınmanın eşiği ne kadar aşmış olduğu.
+
+    ``crossing_delay_cuts`` metriğinin ciddi bir kusuru var: eğrinin eşik
+    civarındaki EĞİMİNE bağlı. Aşınma eğrisi düzse küçük bir µm hatası devasa
+    bir geçiş kayması üretir; dikse aynı hata birkaç geçişe karşılık gelir.
+    Bu yüzden farklı kesiciler arasında karşılaştırılamaz.
+
+    Bu metrik eğimden bağımsız ve doğrudan yorumlanabilir: *alarm çaldığında
+    takım eşiği kaç mikrometre aşmıştı?*
+
+      pozitif  -> geç alarm; takım bu kadar fazla aşınmışken haber verdik
+      negatif  -> erken alarm; takım eşiğe bu kadar uzaktayken haber verdik
+
+    Model hiç alarm vermezse, dizinin sonundaki gerçek aşınma esas alınır -
+    kaçırılan alarmın bedeli budur.
+    """
+    y_true, y_pred = _as_pair(y_true, y_pred)
+
+    pred_idx = first_crossing(y_pred, threshold)
+    if pred_idx is None:
+        return float(y_true[-1] - threshold)
+
+    return float(y_true[pred_idx] - threshold)
+
+
 def summarise(
     y_true: ArrayLike,
     y_pred: ArrayLike,
     wear_limit_um: float,
 ) -> dict[str, float]:
-    """Üç metriği tek sözlükte döndürür."""
+    """Değerlendirme metriklerini tek sözlükte döndürür."""
     return {
         "mae_um": mae_um(y_true, y_pred),
         "rmse_um": rmse_um(y_true, y_pred),
         "crossing_delay_cuts": crossing_delay_cuts(y_true, y_pred, wear_limit_um),
+        "overshoot_um": alarm_overshoot_um(y_true, y_pred, wear_limit_um),
     }
 
 

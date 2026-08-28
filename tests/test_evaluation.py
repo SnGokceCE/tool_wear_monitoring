@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from tcm.evaluation import (
+    alarm_overshoot_um,
     crossing_delay_cuts,
     first_crossing,
     leave_one_cutter_out,
@@ -91,6 +92,58 @@ class TestCrossing:
     def test_undefined_when_truth_never_crosses(self):
         assert np.isnan(crossing_delay_cuts([10, 20], [10, 20], 150))
 
-    def test_summarise_returns_all_three_metrics(self):
+    def test_summarise_returns_all_metrics(self):
         scores = summarise([100, 160], [110, 155], 150)
-        assert set(scores) == {"mae_um", "rmse_um", "crossing_delay_cuts"}
+        assert set(scores) == {
+            "mae_um", "rmse_um", "crossing_delay_cuts", "overshoot_um",
+        }
+
+
+class TestOvershoot:
+    """Eğimden bağımsız alarm metriği.
+
+    ``crossing_delay_cuts`` eğrinin eğimine bağlıdır: düz bölgede küçük bir
+    µm hatası devasa bir geçiş kayması üretir. Bu metrik onun yerine
+    "alarm çaldığında takım eşiği kaç µm aşmıştı" sorusunu sorar.
+    """
+
+    def test_late_alarm_is_positive(self):
+        y_true = [100, 140, 160, 180]
+        y_pred = [100, 130, 140, 155]  # alarm 3. dizinde, gerçek VB orada 180
+        assert alarm_overshoot_um(y_true, y_pred, 150) == pytest.approx(30.0)
+
+    def test_early_alarm_is_negative(self):
+        y_true = [100, 140, 160, 180]
+        y_pred = [100, 155, 170, 190]  # alarm 1. dizinde, gerçek VB orada 140
+        assert alarm_overshoot_um(y_true, y_pred, 150) == pytest.approx(-10.0)
+
+    def test_perfect_alarm_is_the_first_true_crossing(self):
+        y_true = [100, 140, 160, 180]
+        assert alarm_overshoot_um(y_true, y_true, 150) == pytest.approx(10.0)
+
+    def test_missed_alarm_uses_final_wear(self):
+        """Model hiç alarm vermezse bedeli, sona kadar biriken aşınmadır."""
+        y_true = [100, 140, 160, 180]
+        y_pred = [100, 110, 120, 130]
+        assert alarm_overshoot_um(y_true, y_pred, 150) == pytest.approx(30.0)
+
+    def test_same_delay_can_mean_very_different_damage(self):
+        """Aynı '1 geçiş geç' iki durumda bambaşka fiziksel sonuç doğurur.
+
+        Metriği değiştirmemizin sebebi bu: gecikme (geçiş) eğrinin eğimini
+        göremez, overshoot (µm) görür.
+        """
+        # Dik eğri: geçiş başına 20 µm ilerliyor
+        steep_true = [110, 130, 150, 170]
+        steep_pred = [90, 110, 130, 150]
+        # Düz eğri: geçiş başına 2 µm ilerliyor
+        flat_true = [146, 148, 150, 152]
+        flat_pred = [144, 146, 148, 150]
+
+        # İkisi de tam olarak 1 geçiş geç alarm veriyor
+        assert crossing_delay_cuts(steep_true, steep_pred, 150) == 1.0
+        assert crossing_delay_cuts(flat_true, flat_pred, 150) == 1.0
+
+        # Ama takımın gördüğü hasar 10 kat farklı
+        assert alarm_overshoot_um(steep_true, steep_pred, 150) == pytest.approx(20.0)
+        assert alarm_overshoot_um(flat_true, flat_pred, 150) == pytest.approx(2.0)

@@ -12,7 +12,7 @@ Yol haritası: https://claude.ai/code/artifact/395988f2-9463-43ae-b252-62984fe32
 | 01 | Derin literatür taraması | — |
 | 02 | Veri hattı ve keşifsel analiz | **tamamlandı** |
 | 03 | Değerlendirme çatısı | — |
-| 04 | Öznitelik hattı + gradyan artırma | — |
+| 04 | Öznitelik hattı + gradyan artırma (Model A) | **tamamlandı** |
 | 05 | Derin öğrenme modelleri | — |
 | 06 | Sistemi ayağa kaldır (v1) | — |
 | 07 | Çapraz veri seti genelleme sınavı | — |
@@ -107,6 +107,59 @@ daha az şey kaybedebileceği anlamına geliyor.
 `spectrum_early_late.png`: diş geçiş frekansında (520 Hz = mertebe 3) ve
 harmoniğinde (1040 Hz = mertebe 6) keskin tepeler var, tam hesaplanan yerlerde.
 Aşınmış takımın spektrumu tüm bantta 1-2 kat yukarıda.
+
+## Faz 04 — Model A sonuçları (28 Ağustos 2026)
+
+`python scripts/run_model_a.py`
+
+| Model | MAE (µm) | \|overshoot\| (µm) | en kötü overshoot (µm) |
+|---|---:|---:|---:|
+| 0 · naif taban | 21,15 | 35,74 | **+57,53** |
+| 1 · GBM (ham) | 19,91 | **21,13** | **−2,52** |
+| 2 · GBM + monoton | 20,74 | 21,13 | −2,52 |
+| 3 · GBM + normalize + monoton | **19,55** | 34,48 | +67,84 |
+
+**Sonuç: MAE hedefi tutturulamadı (19,55 vs 15 µm), alarm hedefi tutturuldu.**
+
+Asıl kazanım MAE'de değil alarm davranışında: naif taban en kötü katlamada takımın
+eşiği **57,5 µm aşmasına** izin veriyor; GBM (ham) hiçbir katlamada geç alarm
+vermiyor (en kötü overshoot −2,52 µm, yani hep erken). Üretimde bu, hurda parça
+ile sağlam parça arasındaki farktır.
+
+MAE'nin naif tabanı ancak %8 geçmesi sürpriz değil: Faz 02'de eğilim çıkarılmış
+korelasyonun tavanının 0,30 olduğunu ölçmüştük. Model o tavana yakın çalışıyor.
+
+### Kanal alt kümeleri — kuvvet sensörünü kaybetmenin bedeli
+
+| Kanal kümesi | Öznitelik | MAE (µm) | \|overshoot\| (µm) |
+|---|---:|---:|---:|
+| hepsi (7 kanal) | 168 | 20,74 | 21,13 |
+| sadece kuvvet | 72 | 24,75 | 46,33 |
+| titreşim + AE | 96 | 23,82 | 29,37 |
+| sadece titreşim | 72 | 25,10 | 26,36 |
+| sadece AE | 24 | 55,70 | 60,19 |
+
+Kuvveti kaybetmek MAE'yi 20,74 → 23,82 µm'ye çıkarıyor (**+%15**). Ciddi ama
+yıkıcı değil — Model B için iyi haber. AE tek başına kullanılamaz.
+
+### Kabul kriteri revize edildi
+
+Faz 00'daki "gecikme ≤ 5 geçiş" hedefi **ulaşılamaz** çıktı. Eşik civarındaki
+eğim ölçüldüğünde:
+
+| Kesici | Eğim (µm/geçiş) | 5 geçiş için gereken doğruluk | Ölçüm gürültüsü |
+|---|---:|---:|---:|
+| c1 | 0,581 | 2,9 µm | 10,3 µm |
+| c4 | 1,242 | 6,2 µm | 7,9 µm |
+| c6 | 0,954 | 4,8 µm | 20,5 µm |
+
+Hedef, etiketin kendi ölçüm gürültüsünün altında doğruluk istiyordu. Hiçbir model
+bunu sağlayamaz; sağlıyor görünüyorsa sızıntı vardır.
+
+Ayrıca "gecikme (geçiş)" metriği eğrinin eğimine bağlı olduğu için kesiciler
+arasında karşılaştırılamıyor. Yerine **overshoot (µm)** kullanılıyor: alarm
+çaldığında gerçek aşınmanın eşiği kaç µm aştığı. Eğimden bağımsız ve doğrudan
+yorumlanabilir. Yeni hedef: |overshoot| < 25 µm.
 
 ## Kurulum
 

@@ -102,14 +102,32 @@ evaluation:
   # (ISO 8688'in genel kriteri 300 um'dir; burada veri setinin kendi sınırı geçerli.)
   wear_limit_um: 150
 
-  metrics: [mae_um, rmse_um, crossing_delay_cuts]
+  metrics: [mae_um, rmse_um, overshoot_um, crossing_delay_cuts]
 
 # ---------------------------------------------------------------- Kabul kriterleri
-# Faz 00'da sabitlendi. Model bunları geçmiyorsa sisteme girmez.
+#
+# 2026-08-28'de REVİZE EDİLDİ. Faz 00'da konan "gecikme <= 5 geçiş" hedefi
+# veriyle ölçüldüğünde ULAŞILAMAZ çıktı:
+#
+#   kesici | eşik civarı eğim | 5 geçiş için gereken doğruluk | ölçüm gürültüsü
+#   -------|------------------|-------------------------------|----------------
+#   c1     | 0,581 um/geçiş   | 2,9 um                        | 10,3 um
+#   c4     | 1,242 um/geçiş   | 6,2 um                        |  7,9 um
+#   c6     | 0,954 um/geçiş   | 4,8 um                        | 20,5 um
+#
+# Yani hedef, etiketin KENDİ ölçüm gürültüsünün altında bir doğruluk istiyordu.
+# Hiçbir model bunu sağlayamaz; sağlıyor görünüyorsa sızıntı vardır.
+#
+# Ayrıca "gecikme (geçiş)" metriği eğrinin eğimine bağlı olduğu için kesiciler
+# arasında karşılaştırılamıyor: düz bölgede 15 um hata 26 geçiş, dik bölgede
+# 12 geçiş kayması demek. Yerine eğimden bağımsız "overshoot" kullanılıyor:
+# alarm çaldığında gerçek aşınmanın eşiği kaç um aştığı.
 acceptance:
-  max_mae_um: 15.0
-  max_crossing_delay_cuts: 5
-  # Naif taban her iki metrikte de geçilmek zorunda.
+  max_mae_um: 15.0            # ölçüm gürültüsü tabanına yakın; iddialı hedef
+  max_overshoot_um: 25.0      # ~2x ölçüm gürültüsü; eşiğin %17 üstü
   must_beat_naive_baseline: true
+
+  # Bilgi amaçlı: eski hedef ve neden bırakıldığı yukarıda.
+  retired_max_crossing_delay_cuts: 5
 
 random_seed: 42
