@@ -15,11 +15,12 @@ Yol haritası: https://claude.ai/code/artifact/395988f2-9463-43ae-b252-62984fe32
 | 04 | Öznitelik hattı + gradyan artırma (Model A) | **tamamlandı** |
 | 04b | Model B-1: NASA + kesme parametreleri | **tamamlandı** |
 | 04c | Model B-2: NASA + ağırlıklı PHM | **tamamlandı** |
+| 04d | worn/unworn sınıflandırma çıktısı | **tamamlandı** |
 | 05 | Derin öğrenme modelleri | — |
 | 06 | Sistemi ayağa kaldır (v1) | — |
 | 07 | Çapraz veri seti genelleme sınavı | — |
 | 08 | Sensör azaltma çalışması | — |
-| 09 | Karar mantığı ve belirsizlik | — |
+| 09 | Karar mantığı — alarm eşiği | **tamamlandı** |
 | 10 | Sağlamlaştırma ve paketleme | — |
 | 11 | Rapor ve sunum | — |
 
@@ -266,6 +267,113 @@ arasında o ilişki yeterince farklı: PHM'in paslanmaz çelikteki davranışın
 
 **Karar: Model B-1 (sadece NASA) teslim edilecek yapıdır.** Birleştirme
 denendi, ölçüldü, işe yaramadı ve raporda böyle yazılacak.
+
+## Faz 04d — worn/unworn sınıflandırma (28 Ağustos 2026)
+
+`python scripts/run_classification.py`
+
+Mentor güncellemesi: **girdiler serbest, çıktılar arasında worn/unworn olmak
+zorunda.** İki üretim yolu karşılaştırıldı:
+
+- **A · regresyon + eşik** — VB tahmin edilir, eşiği geçtiyse "worn"
+- **B · doğrudan sınıflandırıcı** — modele VB hiç öğretilmez, doğrudan sorulur
+
+NASA, eşik 300 µm, 70 worn / 75 unworn.
+
+### Neden doğruluk (accuracy) tek başına yetmiyor
+
+"Hep çoğunluk sınıfını söyle" tabanı **%51,7 doğruluk** alıyor ama
+`worn_recall = 0` — 70 aşınmış takımın hepsini kaçırıyor. Asıl bakılacak
+metrikler `worn_recall` (aşınmışların kaçta kaçını yakaladık) ve
+`missed_worn` (kaç aşınmış takım kaçtı).
+
+Hata türleri simetrik değil: kaçırılan aşınma parçayı hurdaya çıkarır,
+yanlış alarm sadece takım ömrü israf eder.
+
+### Dengeli doğruluk (balanced accuracy)
+
+| Yöntem | Girdi | vaka-dışı | koşul-dışı | malzeme-dışı |
+|---|---|---:|---:|---:|
+| naif (koşu no + eşik) | 1 | 0,776 | 0,749 | **0,693** |
+| A · regresyon + eşik | sensör | 0,803 | 0,781 | 0,574 |
+| A · regresyon + eşik | **parametre + süre** | **0,885** | **0,844** | 0,576 |
+| A · regresyon + eşik | hepsi | 0,830 | 0,755 | 0,583 |
+| B · sınıflandırıcı | sensör | 0,814 | 0,786 | 0,664 |
+| B · sınıflandırıcı | parametre + süre | 0,835 | 0,780 | 0,561 |
+| B · sınıflandırıcı | hepsi | 0,814 | 0,773 | 0,692 |
+
+### Kaçırılan aşınmış takım sayısı — asıl maliyet
+
+| Yöntem | Girdi | vaka-dışı | koşul-dışı | malzeme-dışı |
+|---|---|---:|---:|---:|
+| naif | 1 | 9 | 9 | 15 |
+| A · regresyon + eşik | **parametre + süre** | **4** | **5** | 23 |
+| A · regresyon + eşik | sensör | 8 | 12 | 26 |
+| B · sınıflandırıcı | sensör | 13 | 16 | 34 |
+
+### Üç bulgu
+
+**1. Regresyon + eşik, doğrudan sınıflandırıcıdan iyi.** Beklenen sonuç değildi.
+Sebebi muhtemelen şu: regresyon VB'nin tamamını öğrenerek daha çok bilgi
+kullanıyor; sınıflandırıcı ise "295 µm" ile "5 µm" arasındaki farkı görmüyor,
+ikisi de sadece "unworn".
+
+**2. Görülmemiş malzemede hiçbir model naif tabanı geçemiyor.** Naif 0,693;
+en iyi model 0,692. Bu, Model B-1'deki regresyon bulgusunun sınıflandırma
+karşılığı ve **alüminyum uyarısının en net kanıtı**: sistem hiç görmediği bir
+malzemede güvenilir değil.
+
+**3. Karar eşiği henüz ayarlanmadı.** Hem A'da (VB eşiği) hem B'de (olasılık
+eşiği) varsayılan değerler kullanılıyor. Kaçırılan aşınma yanlış alarmdan
+pahalı olduğuna göre eşik güvenli tarafa kaydırılmalı — Faz 09'un işi.
+
+## Faz 09 — karar mantığı (28 Ağustos 2026)
+
+`python scripts/run_decision_rule.py`
+
+Model bir VB sayısı üretiyor; "takımı değiştir" demek ayrı bir karar. Varsayılan
+eşik (aşınma sınırının kendisi, 300 µm) optimal değil çünkü modelin hatası var
+ve hata türlerinin maliyeti simetrik değil.
+
+**Maliyet tanımı:** 1 kaçırılan aşınma = 5 yanlış alarm. Bu bir işletme kararı,
+teknik değil; `config/default.yaml` içinde `decision.cost_missed` ile değişir.
+
+**Sızıntıyı önleyen kurgu:** eşik, her dış katlamanın *içinde* ikinci bir çapraz
+doğrulama ile ve yalnızca eğitim verisiyle seçilir. Test verisi eşik seçimine
+hiçbir noktada karışmaz.
+
+### Sonuç
+
+| Sınav | Kural | Kaçırılan | Yanlış alarm | Seçilen eşik | Maliyet |
+|---|---|---:|---:|---:|---:|
+| vaka-dışı | sabit (300 µm) | 4 | 13 | 300,0 | 33 |
+| vaka-dışı | **ayarlı** | **0** | 21 | **272,2** | **21** |
+| koşul-dışı | sabit (300 µm) | 4 | 23 | 300,0 | 43 |
+| koşul-dışı | **ayarlı** | **0** | 34 | **257,6** | **34** |
+| malzeme-dışı | sabit (300 µm) | 16 | 48 | 300,0 | 128 |
+| malzeme-dışı | **ayarlı** | **11** | 48 | **237,0** | **103** |
+
+**Toplam maliyet 204 → 158 (−%22,5).** Bilinen koşullarda kaçırılan aşınma
+sayısı **sıfıra** iniyor.
+
+Seçilen eşikler her sınavda 300'ün altında (272 / 258 / 237 µm) — model
+sistematik olarak eksik tahmin ettiği için karar kuralı güvenli tarafa kayıyor.
+Bu, fizikten beklenen davranış.
+
+**Ardışık onay (histerezis) işe yaramadı:** iç seçim her katlamada k = 1 seçti.
+Tahminler zaten düzgün ilerlediği için (`cum_time` monoton) gürültü bastırmaya
+ihtiyaç yok.
+
+### Yol boyunca bulunan hata
+
+İlk uygulamada ayarlı eşik **300 → 421 µm** çıkıyordu, yani güvensiz tarafa.
+Sebebi: `apply_consecutive` alarmı kilitliyor (aşınma geri dönmez, alarm da
+sönmemeli) — ama bu kural iç çapraz doğrulamanın *birleştirilmiş* tahmin
+dizisine uygulanınca, ilk takımdaki alarm sonraki bütün takımlara taşıyordu.
+Optimizasyon da bundan kaçınmak için eşiği absürt biçimde yükseltiyordu.
+
+Düzeltme: kilitlenme artık takım bazında uygulanıyor. `test_decision.py`
+içinde bu hataya karşı regresyon testi var.
 
 ## Kurulum
 

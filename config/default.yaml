@@ -50,16 +50,30 @@ phm2010:
   wear_aggregation: max
 
 # ---------------------------------------------------------------- NASA
-# İkincil veri seti. Eğitimde KULLANILMAZ - Faz 07'deki genelleme
-# sınavı için ayrılmıştır. Bu kural bilerek konmuştur: eğitime
-# katıldığı anda sınav geçersiz olur.
+#
+# ROL DEĞİŞTİ (2026-08-28). Başlangıçta ikincil veri setiydi ve eğitimde
+# kullanılmıyordu - Faz 07'deki "hiç görülmemiş tezgâh" sınavı için
+# ayrılmıştı.
+#
+# Sonra istenen girdi tanımına kesme parametreleri (malzeme, ilerleme,
+# kesme derinliği) eklendi. Bu değişkenler PHM'de SABİT olduğu için sıfır
+# bilgi taşıyorlar; ancak NASA'da değişiyorlar. Dolayısıyla NASA eğitime
+# alınmak zorunda kaldı.
+#
+# Sınav da buna göre değişti: "veri seti dışı" yerine "koşul dışı" ve
+# "malzeme dışı". İkincisi Tomtaş bağlamında daha değerli - alüminyum
+# sorusuna en yakın kanıt.
+#
+# Model B-1 (sadece NASA) teslim edilecek yapıdır. Model B-2'de PHM ile
+# birleştirme denendi ve reddedildi (bkz. README, Faz 04c).
 nasa:
   root: data/raw/nasa_milling
   mat_file: mill.mat
   channels: [smcAC, smcDC, vib_table, vib_spindle, AE_table, AE_spindle]
   shared_channels: [vib_table, vib_spindle, AE_table, AE_spindle]
   wear_unit: mm
-  use_for_training: false
+  # Artık eğitimde kullanılıyor - yukarıdaki role bakınız.
+  use_for_training: true
 
   # 2026-08-27'de inen veriden doğrulandı:
   #   167 koşu, 146'sında VB etiketi var, 16 vaka
@@ -140,5 +154,25 @@ acceptance:
 
   # Bilgi amaçlı: eski hedef ve neden bırakıldığı yukarıda.
   retired_max_crossing_delay_cuts: 5
+
+# ---------------------------------------------------------------- Karar mantığı
+# Model bir VB sayısı üretir; "takımı değiştir" demek ayrı bir karardır.
+#
+# Hata türlerinin maliyeti simetrik DEĞİL:
+#   kaçırılan aşınma -> aşınmış takım kesmeye devam eder, parça hurdaya gider
+#   yanlış alarm     -> sağlam takım erken değişir, takım ömrü israf olur
+#
+# Aşağıdaki oran bir İŞLETME kararıdır, teknik değil. Gerçek üretimde parça
+# maliyeti ile takım maliyetinden çıkar. 5:1 makul bir başlangıç değeri;
+# havacılık parçasında muhtemelen daha yüksektir.
+decision:
+  cost_missed: 5.0
+  cost_false_alarm: 1.0
+
+  # Eşik adaylarının tarandığı aralık: sınırın %50 altı - %50 üstü.
+  search_span: 0.5
+
+  # Ardışık onay adayları: alarm için üst üste kaç geçiş eşiği aşmalı.
+  consecutive_candidates: [1, 2, 3]
 
 random_seed: 42
