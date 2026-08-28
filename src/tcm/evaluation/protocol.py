@@ -37,6 +37,7 @@ def run_grouped_cv(
     sort_column: str | None = None,
     sample_weight_column: str | None = None,
     postprocess: Callable[[np.ndarray], np.ndarray] | None = None,
+    extra_train: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, list[FoldResult]]:
     """Her grubu sırayla test kümesi yaparak modeli değerlendirir.
 
@@ -45,6 +46,10 @@ def run_grouped_cv(
 
     ``postprocess`` tahmin dizisine uygulanır (örneğin monoton düzleştirme).
     Sıralamaya bağlı olduğu için ``sort_column`` ile birlikte kullanılmalıdır.
+
+    ``extra_train`` her katlamada eğitime eklenen, HİÇBİR ZAMAN test olmayan
+    satırlar. Model B-2'de PHM verisi böyle giriyor: sınav NASA'nın kendi
+    grupları üzerinde yapılıyor, PHM yalnızca yardımcı eğitim verisi.
     """
     groups = sorted(data[group_column].unique())
     if len(groups) < 2:
@@ -60,6 +65,8 @@ def run_grouped_cv(
         test = data[data[group_column] == held_out]
         if sort_column is not None:
             test = test.sort_values(sort_column)
+        if extra_train is not None and len(extra_train):
+            train = pd.concat([train, extra_train], ignore_index=True)
 
         model = model_factory()
         fit_kwargs = {}

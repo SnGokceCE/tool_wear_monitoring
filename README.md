@@ -14,6 +14,7 @@ Yol haritası: https://claude.ai/code/artifact/395988f2-9463-43ae-b252-62984fe32
 | 03 | Değerlendirme çatısı | — |
 | 04 | Öznitelik hattı + gradyan artırma (Model A) | **tamamlandı** |
 | 04b | Model B-1: NASA + kesme parametreleri | **tamamlandı** |
+| 04c | Model B-2: NASA + ağırlıklı PHM | **tamamlandı** |
 | 05 | Derin öğrenme modelleri | — |
 | 06 | Sistemi ayağa kaldır (v1) | — |
 | 07 | Çapraz veri seti genelleme sınavı | — |
@@ -214,6 +215,57 @@ malzemede parametre tabanlı model güvenilmez; orada yalnızca sensör işe yar
   (126/145 koşu) sensör modelinin MAE'si 140,45 → **78,46**'ya düşüyor.
 - Sensörden malzeme tahmini %79,5 doğruluk (taban %67,6) — sinyal malzemeyi
   kısmen ele veriyor ama güçlü değil.
+
+## Faz 04c — Model B-2 sonuçları (28 Ağustos 2026)
+
+`python scripts/run_model_b2.py`
+
+Soru: **PHM'i eğitime eklemek NASA'daki performansı iyileştiriyor mu?**
+
+Kurgu: sınav NASA'nın kendi grupları üzerinde (B-1 ile aynı), PHM satırları her
+katlamada eğitime ekleniyor ama hiçbir zaman test olmuyor. Ortak öznitelik
+uzayında 96 sensör özniteliği (kuvvet ve motor akımı düştü), takım bazında
+normalize edilmiş.
+
+### Cevap: hayır
+
+MAE değişimi, taban çizgisine (PHM yok) göre:
+
+| Ağırlık | vaka-dışı | koşul-dışı | malzeme-dışı | Sonuç |
+|---|---:|---:|---:|---|
+| PHM w=0,05 | +3,1% | +12,0% | −14,3% | 1/3 |
+| PHM w=0,15 (eşit toplam) | +1,5% | +8,9% | −3,1% | 1/3 |
+| PHM w=1,0 (ağırlıksız) | −5,4% | −0,3% | +6,4% | 2/3 |
+
+**Hiçbir ağırlık üç sınavda birden taban çizgisini geçmiyor.** Tek tek
+bakıldığında bazı hücreler iyi görünüyor, ama ağırlığı sonuca bakarak seçmek
+gerekiyor — yani gerçek kazanç değil, seçim yanlılığı.
+
+### Daha kötüsü: alarm davranışı bozuluyor
+
+En kötü overshoot (µm), malzeme-dışı sınavda:
+
+| | vaka-dışı | koşul-dışı | **malzeme-dışı** |
+|---|---:|---:|---:|
+| PHM yok | 320 | 320 | **−60** |
+| PHM w=0,05 | 320 | 320 | **+1230** |
+| PHM w=0,15 | 320 | 320 | **+1230** |
+| PHM w=1,0 | 320 | 320 | **+1230** |
+
+PHM'siz model görülmemiş malzemede hep erken alarm veriyor (−60 µm, güvenli).
+PHM eklenince **her ağırlıkta** 1230 µm geç alarma dönüyor — takımın eşiği
+dört katına çıkmasına izin veriyor. MAE'deki marjinal oynamalar bunun yanında
+önemsiz.
+
+### Yorum
+
+PHM'in 945 satırı tek kesme koşulundan geliyor ve parametre etkisini öğretmeye
+katkısı sıfır. Sensör→aşınma ilişkisinin şeklini öğretebilirdi, ama iki tezgâh
+arasında o ilişki yeterince farklı: PHM'in paslanmaz çelikteki davranışını
+öğrenen model, NASA'nın dökme demir/çelik verisinde yanlış genelliyor.
+
+**Karar: Model B-1 (sadece NASA) teslim edilecek yapıdır.** Birleştirme
+denendi, ölçüldü, işe yaramadı ve raporda böyle yazılacak.
 
 ## Kurulum
 

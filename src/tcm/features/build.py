@@ -40,9 +40,17 @@ def build_cut_features(
 
         iterator = tqdm(refs, desc=f"{cutter}", disable=not show_progress)
         for ref in iterator:
-            frame = stable_region(dataset.load_cut(cutter, ref.index), keep=keep)
+            full = dataset.load_cut(cutter, ref.index)
+            frame = stable_region(full, keep=keep)
 
-            row: dict[str, float] = {"cutter": cutter, "cut": ref.index}
+            row: dict[str, float] = {
+                "cutter": cutter,
+                "cut": ref.index,
+                # Geçişin süresi. NASA tarafında kümülatif kesme süresi en güçlü
+                # girdi çıktı; iki veri setini birleştirebilmek için PHM'de de
+                # aynı büyüklüğün olması gerekiyor. Dosya uzunluğundan hesaplanır.
+                "run_time": len(full) / sampling_rate_hz,
+            }
             row.update(frame_features(frame))
 
             for channel in frame.columns:
@@ -56,7 +64,9 @@ def build_cut_features(
 
             rows.append(row)
 
-    return pd.DataFrame(rows)
+    features = pd.DataFrame(rows).sort_values(["cutter", "cut"]).reset_index(drop=True)
+    features["cum_time"] = features.groupby("cutter")["run_time"].cumsum()
+    return features
 
 
 def attach_wear(features: pd.DataFrame, dataset: PHM2010) -> pd.DataFrame:
