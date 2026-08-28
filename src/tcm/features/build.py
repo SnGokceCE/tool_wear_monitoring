@@ -71,6 +71,121 @@ def attach_wear(features: pd.DataFrame, dataset: PHM2010) -> pd.DataFrame:
     return features.merge(wear_all, on=["cutter", "cut"], how="inner")
 
 
+def build_nasa_features(
+    dataset,
+    sampling_rate_hz: float,
+    rpm: float,
+    max_order: int = 8,
+    keep: float = 0.5,
+    drop_unlabelled: bool = True,
+    drop_cases: tuple[int, ...] = (),
+    show_progress: bool = True,
+) -> pd.DataFrame:
+    """NASA Milling için koşu başına öznitelik + kesme parametresi tablosu.
+
+    PHM'den iki farkı var:
+      - Kesme parametreleri (malzeme, ilerleme, kesme derinliği) sütun olarak
+        eklenir. Model B'nin varlık sebebi bunlar.
+      - Etiket mm cinsinden geliyor, mikrometreye çevrilir (PHM ile aynı birim).
+
+    ``drop_cases`` ile bilinen bozuk vakalar dışlanır (vaka 6'da tek koşu var).
+    """
+    metadata = dataset.metadata()
+
+    if drop_unlabelled:
+        metadata = metadata[metadata["has_label"]]
+    if drop_cases:
+        metadata = metadata[~metadata["case"].isin(drop_cases)]
+
+    rows: list[dict[str, float]] = []
+    iterator = tqdm(
+        metadata.itertuples(index=False),
+        total=len(metadata),
+        desc="nasa",
+        disable=not show_progress,
+    )
+
+    for entry in iterator:
+        frame = stable_region(dataset.signals(int(entry.entry)), keep=keep)
+
+        row: dict[str, float] = {
+            "case": entry.case,
+            "run": entry.run,
+            # --- kesme parametreleri: Model B'nin yeni girdileri ---
+            "material": entry.material,
+            "feed": entry.feed,
+            "doc": entry.DOC,
+            "rpm": rpm,
+            # --- bu koşunun süresi; kümülatifi aşağıda hesaplanır ---
+            "run_time": entry.time,
+            # --- etiket: mm -> um, PHM ile aynı birim ---
+            "vb_um": entry.VB * 1000.0,
+        }
+        row.update(frame_features(frame))
+
+        for channel in frame.columns:
+            bands = order_band_energies(
+                frame[channel].to_numpy(),
+                sampling_rate_hz=sampling_rate_hz,
+                rpm=rpm,
+                max_order=max_order,
+            )
+            row.update({f"{channel}_{name}": value for name, value in bands.items()})
+
+        rows.append(row)
+
+    features = pd.DataFrame(rows).sort_values(["case", "run"]).reset_index(drop=True)
+
+    # Kümülatif kesme süresi - takımın ne kadar süredir kestiği.
+    #
+    # Neden kritik: kesme parametreleri aşınma HIZINI belirler, aşınma
+    # MİKTARINI değil. "Çelikte, 0,5 mm/dev ilerlemeyle" bilgisi tek başına
+    # takımın şu an ne kadar aşındığını söylemez - ne kadar süredir kestiğini
+    # de bilmek gerekir. Hız x süre = aşınma.
+    #
+    # Sahada da bilinen bir bilgidir: yeni takım takıldığında sayaç sıfırlanır.
+    features["cum_time"] = features.groupby("case")["run_time"].cumsum()
+
+    # Koşul kimliği: parametre genellemesi sınavının gruplama anahtarı.
+    features["condition"] = (
+        features["material"].astype(str)
+        + "_ap" + features["doc"].astype(str)
+        + "_f" + features["feed"].astype(str)
+    )
+    return features
+
+
+def load_or_build_nasa(
+    cache_path: str | Path,
+    dataset,
+    sampling_rate_hz: float,
+    rpm: float,
+    max_order: int = 8,
+    keep: float = 0.5,
+    drop_cases: tuple[int, ...] = (),
+    rebuild: bool = False,
+) -> pd.DataFrame:
+    """NASA öznitelik tablosu; önbellek varsa okur."""
+    cache_path = Path(cache_path)
+    if cache_path.exists() and not rebuild:
+        print(f"Önbellekten okunuyor: {cache_path}")
+        return pd.read_csv(cache_path)
+
+    print("NASA öznitelikleri üretiliyor...")
+    features = build_nasa_features(
+        dataset,
+        sampling_rate_hz=sampling_rate_hz,
+        rpm=rpm,
+        max_order=max_order,
+        keep=keep,
+        drop_cases=drop_cases,
+    )
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    features.to_csv(cache_path, index=False)
+    print(f"Kaydedildi: {cache_path}  ({len(features)} satır, {features.shape[1]} sütun)")
+    return features
+
+
 def load_or_build(
     cache_path: str | Path,
     dataset: PHM2010,

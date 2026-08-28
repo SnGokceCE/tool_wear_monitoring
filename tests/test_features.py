@@ -48,6 +48,21 @@ class TestTimeDomain:
         result = time_domain_features([])
         assert all(np.isnan(v) for v in result.values())
 
+    def test_constant_signal_gives_zero_shape_features(self):
+        """Sabit sinyalde çarpıklık/basıklık tanımsız - uyarı yerine 0 dönmeli."""
+        result = time_domain_features(np.full(1000, 3.7))
+        assert result["skew"] == 0.0
+        assert result["kurtosis"] == 0.0
+        assert result["std"] == pytest.approx(0.0)
+        assert result["rms"] == pytest.approx(3.7)
+
+    def test_near_constant_signal_does_not_produce_nan(self):
+        values = np.full(1000, 5.0)
+        values[0] = 5.0 + 1e-15
+        result = time_domain_features(values)
+        assert np.isfinite(result["skew"])
+        assert np.isfinite(result["kurtosis"])
+
     def test_frame_features_are_flattened_per_channel(self):
         frame = pd.DataFrame({"force_x": [1.0, 2.0], "vib_x": [3.0, 4.0]})
         result = frame_features(frame)

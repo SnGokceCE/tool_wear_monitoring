@@ -13,6 +13,7 @@ Yol haritası: https://claude.ai/code/artifact/395988f2-9463-43ae-b252-62984fe32
 | 02 | Veri hattı ve keşifsel analiz | **tamamlandı** |
 | 03 | Değerlendirme çatısı | — |
 | 04 | Öznitelik hattı + gradyan artırma (Model A) | **tamamlandı** |
+| 04b | Model B-1: NASA + kesme parametreleri | **tamamlandı** |
 | 05 | Derin öğrenme modelleri | — |
 | 06 | Sistemi ayağa kaldır (v1) | — |
 | 07 | Çapraz veri seti genelleme sınavı | — |
@@ -160,6 +161,59 @@ Ayrıca "gecikme (geçiş)" metriği eğrinin eğimine bağlı olduğu için kes
 arasında karşılaştırılamıyor. Yerine **overshoot (µm)** kullanılıyor: alarm
 çaldığında gerçek aşınmanın eşiği kaç µm aştığı. Eğimden bağımsız ve doğrudan
 yorumlanabilir. Yeni hedef: |overshoot| < 25 µm.
+
+## Faz 04b — Model B-1 sonuçları (28 Ağustos 2026)
+
+`python scripts/run_model_b1.py` — NASA, 145 koşu, 15 vaka, 8 koşul.
+
+MAE (µm), üç ayrı sınav:
+
+| Girdi kümesi | Öznitelik | vaka-dışı | koşul-dışı | **malzeme-dışı** |
+|---|---:|---:|---:|---:|
+| naif taban (koşu no) | 1 | 145,99 | 164,59 | 308,96 |
+| sadece sensör | 144 | 145,38 | 173,26 | **221,34** |
+| **parametre + süre** | 5 | **108,38** | **114,19** | 388,16 |
+| sensör + parametre | 148 | 144,04 | 159,52 | 226,15 |
+| sensör + parametre + süre | 149 | 138,61 | 164,82 | 271,91 |
+
+### Üç bulgu
+
+**1. Kesme parametreleri TEK BAŞINA işe yaramıyor (MAE 205 µm), ama süreyle
+birlikte her şeyi geçiyor (108 µm).**
+
+Fizik açık: kesme parametreleri aşınma **hızını** belirler, **miktarını** değil.
+"Çelikte, 0,5 mm/dev ilerlemeyle" bilgisi takımın şu an ne kadar aşındığını
+söylemez — ne kadar süredir kestiğini de bilmek gerekir. Hız × süre = aşınma.
+
+Bu, istenen girdi tanımının (malzeme + ilerleme + kesme parametreleri)
+**eksik** olduğu anlamına gelir: kümülatif kesme süresi olmadan çalışmaz.
+Sahada bilinen bir değerdir (yeni takımda sayaç sıfırlanır).
+
+**2. NASA'da 5 girdilik parametre modeli, 144 öznitelikli sensör modelini
+eziyor** — ve sensör eklemek onu bozuyor (108,38 → 138,61).
+
+Sebebi NASA'nın 250 Hz örneklemesi. PHM'de (50 kHz) sensörler naif tabanı
+geçmişti; burada geçemiyor. Sensörün değeri, sensörün kalitesine bağlı.
+
+**3. Ama malzeme değişince tablo tersine dönüyor.** Görülmemiş malzemede
+parametre modeli çöküyor (388,16 — naif tabandan bile kötü), sensör modeli
+en iyisi oluyor (221,34).
+
+Sebep: parametre modeli dökme demirin aşınma hızını öğrenip çeliğe uyguluyor
+ve yanılıyor. Sensör modeli hızı çıkarsamak yerine **durumu ölçtüğü** için
+daha zarif bozuluyor.
+
+**Bu doğrudan Tomtaş'ın alüminyum sorusuna denk geliyor:** hiç görülmemiş bir
+malzemede parametre tabanlı model güvenilmez; orada yalnızca sensör işe yarar.
+
+### Yan gözlemler
+
+- `cum_time` öznitelik öneminde 1. sırada; `feed` ve `rpm` sıfır. (`rpm` NASA'da
+  sabit olduğu için sıfır çıkması beklenen davranış.)
+- Aşırı aşınmış koşular MAE'yi ikiye katlıyor: VB ≤ 600 µm ile sınırlandığında
+  (126/145 koşu) sensör modelinin MAE'si 140,45 → **78,46**'ya düşüyor.
+- Sensörden malzeme tahmini %79,5 doğruluk (taban %67,6) — sinyal malzemeyi
+  kısmen ele veriyor ama güçlü değil.
 
 ## Kurulum
 

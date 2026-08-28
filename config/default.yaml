@@ -73,6 +73,17 @@ nasa:
   # Vaka 6'da tek koşu var - bilinen veri düzensizliği, kullanılabilir değil.
   known_bad_cases: [6]
 
+  # NASA için aşınma eşiği PHM'den farklı. PHM'in 150 um'si o deneyin kendi
+  # sınırıydı; NASA 1530 um'ye kadar çıkıyor. Burada ISO 8688'in genel
+  # kriteri (VB = 0,3 mm) kullanılıyor - 146 etiketin 69'u bu değerin üstünde,
+  # yani eşik veriyi makul biçimde ikiye bölüyor.
+  wear_limit_um: 300
+
+  # Malzeme kodları (veriden doğrulandı)
+  material_codes:
+    1: "dökme demir"
+    2: "çelik"
+
 # ---------------------------------------------------------------- Transfer
 # Faz 07'nin temel kısıtı: iki veri setinin frekans bantları ÖRTÜŞMÜYOR.
 #

@@ -20,13 +20,21 @@ def time_domain_features(values: np.ndarray) -> dict[str, float]:
     if values.size == 0:
         return {name: float("nan") for name in FEATURE_NAMES}
 
+    std = float(np.std(values))
+
+    # Neredeyse sabit sinyalde çarpıklık ve basıklık tanımsızdır: payda sıfıra
+    # gider ve scipy "catastrophic cancellation" uyarısı verip güvenilmez sayı
+    # döndürür. NASA'nın bazı koşularında bu oluyor. Şekil ölçüsü olmayan bir
+    # sinyalde 0 döndürmek, çöp sayı döndürmekten iyi.
+    shape_defined = std > 1e-12 * max(1.0, float(np.max(np.abs(values))))
+
     return {
         "rms": float(np.sqrt(np.mean(values**2))),
-        "std": float(np.std(values)),
+        "std": std,
         "peak": float(np.max(np.abs(values))),
         "p2p": float(np.ptp(values)),
-        "skew": float(stats.skew(values)),
-        "kurtosis": float(stats.kurtosis(values)),
+        "skew": float(stats.skew(values)) if shape_defined else 0.0,
+        "kurtosis": float(stats.kurtosis(values)) if shape_defined else 0.0,
         "abs_mean": float(np.mean(np.abs(values))),
     }
 

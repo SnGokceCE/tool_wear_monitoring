@@ -44,6 +44,28 @@ DEFAULT_PARAMS = {
 # muhafazakâr tutuldu; raporda böyle belirtilecek.
 
 
+# Küçük veri için ayrı set. NASA'da ~100-130 eğitim satırı var; Model A'nın
+# 630 satır için seçilmiş ayarları burada modeli felç ediyor:
+# min_child_samples=30 ile 100 satırlık veride ağaç neredeyse hiç dallanamaz.
+#
+# Bu değerler de test sonuçlarına BAKILARAK seçilmedi. Kural: yaprak başına
+# asgari örnek ~ eğitim satırının %5'i, yaprak sayısı buna göre küçük.
+SMALL_DATA_PARAMS = {
+    **DEFAULT_PARAMS,
+    "n_estimators": 300,
+    "learning_rate": 0.05,
+    "num_leaves": 7,
+    "min_child_samples": 5,
+    "colsample_bytree": 0.5,
+}
+
+
+def make_gbm_small(random_state: int = 42, **overrides) -> LGBMRegressor:
+    """Küçük veri kümeleri için model (NASA: ~145 satır)."""
+    params = {**SMALL_DATA_PARAMS, **overrides, "random_state": random_state}
+    return LGBMRegressor(**params)
+
+
 def make_gbm(random_state: int = 42, **overrides) -> LGBMRegressor:
     """Varsayılan ayarlarla yeni bir model üretir.
 
