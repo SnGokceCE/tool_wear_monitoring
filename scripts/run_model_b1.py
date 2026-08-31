@@ -24,6 +24,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from lightgbm import LGBMClassifier
 
 from tcm import load_config
 from tcm.cli import setup_console
@@ -31,7 +32,8 @@ from tcm.datasets import NASAMilling
 from tcm.evaluation.protocol import run_grouped_cv, summarise_folds
 from tcm.features.build import load_or_build_nasa
 from tcm.models import NaiveWearBaseline, enforce_monotonic
-from tcm.models.gbm import feature_importance, make_gbm_small
+from tcm.models.gbm import SMALL_DATA_PARAMS, feature_importance, make_gbm_small
+from tcm.provenance import format_stamp, run_stamp
 
 # Etiket ve kimlik sütunları - öznitelik değiller.
 META_COLUMNS = {"case", "run", "vb_um", "condition", "run_time"}
@@ -131,6 +133,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         rows.append({"model": "4 · sensör + parametre + süre", **summarise_folds(table_all)})
 
+        # Süresiz parametre modeli. 2. satırla karşılaştırıldığında kümülatif
+        # sürenin tek başına ne kadar iş yaptığını gösterir: parametreler
+        # aşınma HIZINI belirler, MİKTARINI değil.
+        table_param, _ = run_grouped_cv(
+            data, group_column, PARAMETER_COLUMNS, "vb_um",
+            model_factory=lambda: make_gbm_small(random_state=seed),
+            wear_limit_um=limit, sort_column="run",
+        )
+        rows.append({"model": "5 · sadece parametre (süresiz)",
+                     **summarise_folds(table_param)})
+
         summary = pd.DataFrame(rows)
         print(summary.to_string(index=False, float_format=lambda v: f"{v:9.2f}"))
 
@@ -140,6 +153,9 @@ def main(argv: list[str] | None = None) -> int:
 
         summary["sinav"] = label
         all_rows.append(summary)
+
+    # ------------------------------------------------------- ek analizler
+    extras = _extra_analyses(data, sensor_columns, protocols, limit, seed)
 
     # ---------------------------------------------------------- önemler
     print("\n" + "=" * 78)
@@ -160,15 +176,107 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {row.oznitelik:10s} önem {row.onem:5d}  "
               f"({100 * row.onem / total:4.1f}%)  sıra {rank}/{len(importance)}")
 
+    stamp = run_stamp(args.config) if args.config else run_stamp()
+    print("\n" + "-" * 78)
+    print("ÇALIŞTIRMA KÜNYESİ")
+    print("-" * 78)
+    print(format_stamp(stamp))
+
     if args.save:
         target = config.path("paths.reports")
         target.mkdir(parents=True, exist_ok=True)
-        pd.concat(all_rows, ignore_index=True).to_csv(
-            target / "model_b1_summary.csv", index=False)
+        pd.concat(all_rows, ignore_index=True).assign(
+            git_hash=stamp["git_hash"]
+        ).to_csv(target / "model_b1_summary.csv", index=False)
         importance.to_csv(target / "model_b1_importance.csv", index=False)
+        extras.assign(git_hash=stamp["git_hash"]).to_csv(
+            target / "model_b1_extras.csv", index=False)
         print(f"\nKaydedildi: {target}")
 
     return 0
+
+
+def _extra_analyses(data, sensor_columns, protocols, limit, seed) -> pd.DataFrame:
+    """İki yan analiz. Önceden elle yapılıyorlardı; betiğe alındılar.
+
+    Elle yapılan analizin sorunu, sayısının kaydedilmemesi ve protokolünün
+    yazılı olmaması: "sensörden malzeme tahmini %79,5" değeri raporda üç gün
+    durdu ve hangi bölmeyle üretildiği bilinmediği için yeniden üretilemedi.
+    """
+    rows = []
+
+    # --- 1) Aşırı aşınmış koşuların MAE'ye etkisi -------------------------
+    #
+    # NASA'da VB 1530 µm'ye kadar çıkıyor; ISO sınırının beş katı. Bu koşular
+    # aşınma tahmini için anlamlı bir çalışma bölgesi değil ve hatayı tek
+    # başlarına şişiriyorlar. Sınırlandırılmış alt küme, modelin KULLANILABİLİR
+    # aralıktaki gerçek doğruluğunu gösterir.
+    print("\n" + "=" * 78)
+    print("EK ANALİZ 1 - aşırı aşınmış koşuların MAE'ye etkisi")
+    print("=" * 78)
+    capped = data[data["vb_um"] <= 600.0]
+    print(f"VB ≤ 600 µm: {len(capped)}/{len(data)} koşu\n")
+
+    for label, group_column in protocols.items():
+        if capped[group_column].nunique() < 2:
+            continue
+        full, _ = run_grouped_cv(
+            data, group_column, sensor_columns, "vb_um",
+            model_factory=lambda: make_gbm_small(random_state=seed),
+            wear_limit_um=limit, sort_column="run",
+        )
+        sub, _ = run_grouped_cv(
+            capped, group_column, sensor_columns, "vb_um",
+            model_factory=lambda: make_gbm_small(random_state=seed),
+            wear_limit_um=limit, sort_column="run",
+        )
+        mae_full = summarise_folds(full)["mae_um"]
+        mae_sub = summarise_folds(sub)["mae_um"]
+        print(f"  {label:14s} sensör MAE  tam veri {mae_full:7.2f}  ->  "
+              f"VB≤600 {mae_sub:7.2f}   ({100 * (mae_sub - mae_full) / mae_full:+.1f}%)")
+        rows.append({"analiz": "vb_kapali_600", "sinav": label,
+                     "deger": mae_sub, "referans": mae_full})
+
+    # --- 2) Sensörler malzemeyi ele veriyor mu? --------------------------
+    #
+    # Bölme protokolü sonucu BELİRLİYOR, o yüzden ikisi de raporlanıyor:
+    #
+    #   takım bazında  - iyimser. `condition` malzemeyi İÇERİYOR (malzeme +
+    #                    doc + feed), dolayısıyla dışarıda bırakılan takımın
+    #                    kardeşleri aynı koşulla eğitimde kalır ve model
+    #                    "bu imza = bu koşul = bu malzeme" ezberleyebilir.
+    #   koşul bazında  - dürüst sınav: hiç görülmemiş bir kesme koşulunda
+    #                    malzeme sinyalden okunabiliyor mu?
+    print("\n" + "=" * 78)
+    print("EK ANALİZ 2 - sensörler malzemeyi ele veriyor mu?")
+    print("=" * 78)
+    baseline = float(data["material"].value_counts().max() / len(data))
+    print(f"Çoğunluk sınıfı tabanı: {baseline:.3f}\n")
+
+    for label, group_column in [("takım bazında", "case"), ("koşul bazında", "condition")]:
+        truths, preds = [], []
+        for held_out in sorted(data[group_column].unique()):
+            train = data[data[group_column] != held_out]
+            test = data[data[group_column] == held_out]
+            if train["material"].nunique() < 2:
+                continue
+            model = LGBMClassifier(**SMALL_DATA_PARAMS, random_state=seed)
+            model.fit(train[sensor_columns], train["material"])
+            truths.append(test["material"].to_numpy())
+            preds.append(model.predict(test[sensor_columns]))
+
+        if not truths:
+            continue
+        accuracy = float((np.concatenate(truths) == np.concatenate(preds)).mean())
+        print(f"  {label:14s} doğruluk {accuracy:.3f}   "
+              f"(tabanın {accuracy - baseline:+.3f} üstünde)")
+        rows.append({"analiz": "malzeme_tahmini", "sinav": label,
+                     "deger": accuracy, "referans": baseline})
+
+    print("\n  Koşul bazındaki sayı asıl olandır: takım bazında bölme, kardeş")
+    print("  takımlar aynı kesme koşulunu paylaştığı için iyimserdir.")
+
+    return pd.DataFrame(rows)
 
 
 def _describe_data(data, sensor_columns, limit, bad_cases) -> None:

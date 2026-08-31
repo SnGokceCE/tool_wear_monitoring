@@ -33,6 +33,7 @@ from tcm.cli import setup_console
 from tcm.evaluation.classification import classification_scores, majority_baseline
 from tcm.models.gbm import SMALL_DATA_PARAMS, make_gbm_small
 from tcm.models import NaiveWearBaseline
+from tcm.provenance import format_stamp, run_stamp
 
 META_COLUMNS = {"case", "run", "vb_um", "condition", "run_time"}
 PARAMETER_COLUMNS = ["material", "feed", "doc", "rpm"]
@@ -111,10 +112,18 @@ def main(argv: list[str] | None = None) -> int:
     combined = pd.concat(all_rows, ignore_index=True)
     _verdict(combined)
 
+
+    stamp = run_stamp(args.config) if args.config else run_stamp()
+    print("\n" + "-" * 78)
+    print("ÇALIŞTIRMA KÜNYESİ")
+    print("-" * 78)
+    print(format_stamp(stamp))
+
     if args.save:
         target = config.path("paths.reports")
         target.mkdir(parents=True, exist_ok=True)
-        combined.to_csv(target / "classification_summary.csv", index=False)
+        combined.assign(git_hash=stamp["git_hash"]).to_csv(
+            target / "classification_summary.csv", index=False)
         print(f"\nKaydedildi: {target / 'classification_summary.csv'}")
 
     return 0

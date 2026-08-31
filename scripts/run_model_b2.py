@@ -34,6 +34,7 @@ from tcm.features.shared import (
     sensor_columns_of,
 )
 from tcm.models.gbm import make_gbm_small
+from tcm.provenance import format_stamp, run_stamp
 
 PROTOCOLS = {
     "vaka-dışı": "tool",
@@ -106,10 +107,19 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 78)
     _verdict(pd.concat(all_rows, ignore_index=True))
 
+
+    stamp = run_stamp(args.config) if args.config else run_stamp()
+    print("\n" + "-" * 78)
+    print("ÇALIŞTIRMA KÜNYESİ")
+    print("-" * 78)
+    print(format_stamp(stamp))
+
     if args.save:
         target = config.path("paths.reports")
         target.mkdir(parents=True, exist_ok=True)
-        pd.concat(all_rows, ignore_index=True).to_csv(
+        pd.concat(all_rows, ignore_index=True).assign(
+            git_hash=stamp["git_hash"]
+        ).to_csv(
             target / "model_b2_summary.csv", index=False)
         print(f"\nKaydedildi: {target}")
 

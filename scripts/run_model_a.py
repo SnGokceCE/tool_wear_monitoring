@@ -27,8 +27,25 @@ from tcm.evaluation.protocol import run_grouped_cv, summarise_folds
 from tcm.features.normalise import baseline_normalise
 from tcm.models import NaiveWearBaseline, enforce_monotonic
 from tcm.models.gbm import feature_importance, make_gbm, select_channels
+from tcm.provenance import format_stamp, run_stamp
 
-META_COLUMNS = {"cutter", "cut", "vb_um", "flute_spread_um"}
+# Öznitelik OLMAYAN sütunlar.
+#
+# `run_time` ve `cum_time` bilinçli olarak DIŞARIDA. İkisi de PHM tablosuna
+# sonradan, Model B-2'nin iki veri setini birleştirebilmesi için eklendi
+# (Faz 04c) - Model A için değil.
+#
+# Model A'nın sorusu şu: SENSÖRLER, geçiş sayısından okunabilen eğilimin
+# ötesine ne katıyor? `cum_time` PHM'de geçiş sayısının neredeyse birebir
+# monoton bir fonksiyonu, yani naif tabanın girdisinin ta kendisi. Modele
+# verilirse Model A o soruyu artık ölçmez; naif tabanın bilgisini hazır alıp
+# üstüne sensör ekler ve "sensör modeli tabanı geçti" karşılaştırması
+# anlamını kaybeder.
+#
+# Bu gerçekten oldu: iki sütun eklendikten sonra Model A onları sessizce
+# yuttu (168 -> 170 öznitelik) ve MAE 19,91'den 19,18'e "iyileşti". Faz 06
+# denetiminde yakalandı; bkz. README, "Yol boyunca yanlış çıkan şeyler".
+META_COLUMNS = {"cutter", "cut", "vb_um", "flute_spread_um", "run_time", "cum_time"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -158,9 +175,17 @@ def main(argv: list[str] | None = None) -> int:
     by_channel["pay_%"] = (100 * by_channel["onem"] / by_channel["onem"].sum()).round(1)
     print(by_channel.to_string(index=False))
 
+
+    stamp = run_stamp(args.config) if args.config else run_stamp()
+    print("\n" + "-" * 78)
+    print("ÇALIŞTIRMA KÜNYESİ")
+    print("-" * 78)
+    print(format_stamp(stamp))
+
     if args.save:
         target = config.path("paths.reports")
         target.mkdir(parents=True, exist_ok=True)
+        summary = summary.assign(git_hash=stamp["git_hash"])
         summary.to_csv(target / "model_a_summary.csv", index=False)
         mono_table.to_csv(target / "model_a_folds.csv", index=False)
         subset_table.to_csv(target / "model_a_channels.csv", index=False)

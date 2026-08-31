@@ -30,10 +30,11 @@ Rapordaki her sayı bir çalıştırmadan gelir. Hangi kodla, hangi ayarla ve ha
 kütüphane sürümleriyle üretildiği bilinmiyorsa o sayı doğrulanamaz — ve üç ay
 sonra yeniden üretilemez.
 
-Bu yüzden `train_model.py`, `run_model_deep.py` ve `threshold_sweep.py` her
-çıktının yanına künye yazar (`tcm.provenance`): git commit'i, çalışma ağacının
-kirli olup olmadığı, config dosyasının sha256'sı, komut satırı, zaman damgası
-ve LightGBM / scikit-learn / NumPy / pandas / SciPy / PyTorch sürümleri.
+Bu yüzden **sonuç üreten her betik** çıktısının yanına künye yazar
+(`tcm.provenance`): git commit'i, çalışma ağacının kirli olup olmadığı, config
+dosyasının sha256'sı, zaman damgası ve LightGBM / scikit-learn / NumPy /
+pandas / SciPy / PyTorch sürümleri. Kaydedilen tablolar ayrıca bir `git_hash`
+sütunu taşır.
 
 | README bölümü | Kaynak dosya | Üretme komutu |
 |---|---|---|
@@ -48,22 +49,31 @@ ve LightGBM / scikit-learn / NumPy / pandas / SciPy / PyTorch sürümleri.
 | Faz 06 · eşik taraması | `reports/threshold_sweep.csv` | `python scripts/threshold_sweep.py --save` |
 | Faz 09 · karar kuralı | `reports/decision_rule_summary.csv` | `python scripts/run_decision_rule.py --save` |
 
-Üç uyarı:
+### Künye denetimi (31 Ağustos 2026)
 
-- **Faz 04 ve 04b–04d sonuçları künye eklenmeden önce (28 Ağustos 2026)
-  üretildi** ve künyesizliğin bedeli somut olarak görüldü: Faz 04b tablosunun
-  dokuz hücresi, `skew`/`kurtosis` koruması eklenmeden önceki kodla üretilmiş
-  eski değerleri taşıyordu. 31 Ağustos'ta teşhis edilip
-  `reports/model_b1_summary.csv` ile eşitlendi (ayrıntı Faz 04b bölümünde).
-  Künye kayıtlı olsaydı bu, üç gün değil bir bakışta anlaşılırdı.
-  **Faz 04, 04c ve 04d tabloları aynı riski taşıyor ve henüz kontrol
-  edilmedi** — bu betiklerin hiçbirinde künye yok.
+Faz 04–04d sonuçları künye eklenmeden önce (28 Ağustos) üretilmişti. Hepsi
+yeniden çalıştırılıp kayıtlı tablolarla karşılaştırıldı. **İki tabloda kayma
+bulundu, ikisi de düzeltildi:**
+
+| Bölüm | Denetim sonucu |
+|---|---|
+| Faz 04 · Model A | **Hata bulundu.** Kod, `run_time`/`cum_time` sütunlarını sessizce öznitelik olarak yutuyordu (168 → 170). README'deki sayılar doğruydu; kod düzeltildi ve tablo birebir geri geldi. |
+| Faz 04b · Model B-1 | **Kayma bulundu.** README dokuz hücrede `skew`/`kurtosis` koruması öncesi değerleri taşıyordu. CSV ile eşitlendi. |
+| Faz 04c · Model B-2 | temiz — sayılar değişmedi |
+| Faz 04d · sınıflandırma | temiz — sayılar değişmedi |
+
+İkisinin de ayrıntısı "Yol boyunca yanlış çıkan şeyler" bölümünde. Dört
+betiğin dördüne de künye eklendi; bu sınıf hata bir daha sessizce geçemez.
+
+İki uyarı daha:
+
 - **Faz 09 sayıları 31 Ağustos 2026'da değişti** (kilitlenme hatası
   düzeltildi). Eski ve yeni değerlerin karşılaştırması "Yol boyunca yanlış
   çıkan şeyler" bölümünde.
-- **Faz 05 ve Faz 06 künyeleri "kirli" (dirty) işaretli.** Sayılar, henüz
-  commit edilmemiş bir çalışma ağacıyla üretildi. Faz 06 commit edildikten
-  sonra bu betikler yeniden çalıştırılırsa künyeler temiz commit'e bağlanır.
+- **Bazı künyeler "kirli" (dirty) işaretli.** O sayılar henüz commit
+  edilmemiş bir çalışma ağacıyla üretildi ve o git hash'inden birebir
+  yeniden üretilemezler. Betikler temiz ağaçta yeniden çalıştırılırsa künye
+  temiz commit'e bağlanır.
 
 ## Kabul kriterleri
 
@@ -218,6 +228,7 @@ MAE (µm), üç ayrı sınav:
 | **parametre + süre** | 5 | **108,38** | **114,19** | 388,16 |
 | sensör + parametre | 148 | 139,42 | 163,99 | 226,66 |
 | sensör + parametre + süre | 149 | 138,47 | 164,27 | 271,49 |
+| sadece parametre (süresiz) | 4 | 206,20 | 202,86 | 238,87 |
 
 > **Düzeltildi (31 Ağustos 2026).** Bu tablo bir süre `145,38 / 173,26 /
 > 221,34` gibi **başka** sayılar içeriyordu. Sebep teşhis edildi: o değerler,
@@ -242,8 +253,15 @@ MAE (µm), üç ayrı sınav:
 
 ### Üç bulgu
 
-**1. Kesme parametreleri TEK BAŞINA işe yaramıyor (MAE 205 µm), ama süreyle
-birlikte her şeyi geçiyor (108 µm).**
+**1. Kesme parametreleri TEK BAŞINA işe yaramıyor, ama süreyle birlikte her
+şeyi geçiyor.**
+
+| Girdi | vaka-dışı | koşul-dışı |
+|---|---:|---:|
+| sadece parametre (süresiz) | 206,20 | 202,86 |
+| **parametre + süre** | **108,38** | **114,19** |
+
+Kümülatif süreyi eklemek hatayı neredeyse yarıya indiriyor.
 
 Fizik açık: kesme parametreleri aşınma **hızını** belirler, **miktarını** değil.
 "Çelikte, 0,5 mm/dev ilerlemeyle" bilgisi takımın şu an ne kadar aşındığını
@@ -289,20 +307,40 @@ malzemede parametre tabanlı model güvenilmez; orada yalnızca sensör işe yar
   sabit olduğu için sıfır çıkması beklenen davranış.) —
   `reports/model_b1_importance.csv`
 
-Aşağıdaki iki gözlem **elle yapılmış, betiğe girmemiş** analizlerden geliyor;
-kayıtlı bir çıktı dosyaları yok ve yukarıdaki koruma düzeltmesinden önce
-üretildikleri için sayıları da güncel olmayabilir. Yeniden üretilmeden rapora
-alınmamalıdır:
+### Aşırı aşınmış koşular hatanın yarısını üretiyor
 
-- *(doğrulanmamış)* Aşırı aşınmış koşular MAE'yi ikiye katlıyor: VB ≤ 600 µm
-  ile sınırlandığında (126/145 koşu) sensör modelinin MAE'si 140,45 →
-  **78,46**'ya düşüyor.
-- *(doğrulanmamış)* Sensörden malzeme tahmini %79,5 doğruluk (taban %67,6) —
-  sinyal malzemeyi kısmen ele veriyor ama güçlü değil.
+NASA'da VB 1530 µm'ye kadar çıkıyor — ISO sınırının beş katı. Bu koşular
+aşınma tahmini için anlamlı bir çalışma bölgesi değil. VB ≤ 600 µm ile
+sınırlandığında (126/145 koşu) sensör modelinin MAE'si:
 
-Aynı şekilde, yukarıdaki 1. bulgudaki "kesme parametreleri tek başına MAE
-205 µm" değeri de kayıtlı tabloda yok (tablo yalnızca `parametre + süre`
-satırını içeriyor) ve doğrulanmamıştır.
+| Sınav | Tam veri | VB ≤ 600 µm | Değişim |
+|---|---:|---:|---:|
+| vaka-dışı | 140,19 | **78,44** | −%44,0 |
+| koşul-dışı | 166,57 | **88,10** | −%47,1 |
+| malzeme-dışı | 216,85 | **109,18** | −%49,7 |
+
+Hatanın yaklaşık yarısı, zaten çoktan hurdaya çıkmış takımlardan geliyor.
+Kullanılabilir aralıkta model iki kat daha iyi. — `reports/model_b1_extras.csv`
+
+### Sensörler malzemeyi ne kadar ele veriyor?
+
+Sensör özniteliklerinden malzemeyi tahmin etmeyi denedik. **Bölme protokolü
+sonucu belirliyor**, o yüzden ikisi de veriliyor (çoğunluk sınıfı tabanı 0,676):
+
+| Bölme | Doğruluk | Tabanın üstünde |
+|---|---:|---:|
+| takım bazında | 0,890 | +0,214 |
+| **koşul bazında** | **0,717** | **+0,041** |
+
+**Asıl sayı koşul bazındaki.** Takım bazında bölme iyimser, çünkü `condition`
+kimliği malzemeyi zaten içeriyor (malzeme + kesme derinliği + ilerleme):
+dışarıda bırakılan takımın kardeşleri aynı koşulla eğitimde kalıyor ve model
+"bu imza = bu koşul = bu malzeme" ezberleyebiliyor.
+
+Görülmemiş bir kesme koşulunda sensörler malzemeyi tabanın yalnızca 4 puan
+üstünde bilebiliyor. Bu, **alüminyum uyarısını zayıflatmıyor, güçlendiriyor**:
+sistem hiç görmediği bir malzemeyi sinyalden tanıyıp kendini uyaramaz.
+— `reports/model_b1_extras.csv`
 
 ## Faz 04c — Model B-2 sonuçları (28 Ağustos 2026)
 
@@ -754,13 +792,61 @@ O terim eklendiğinde `material` kalibrasyonu yeniden değerlendirilmelidir —
 şu anki reddi, kalibrasyonun kendisine değil, onu değerlendiren maliyet
 fonksiyonunun eksikliğine dayanıyor.
 
-### 3. Kabul kriterinin ulaşılamaz olması (Faz 04)
+### 3. Model A'nın zaman sütunlarını sessizce yutması (Faz 06 denetiminde bulundu)
+
+Model A'nın sorusu şu: **sensörler, geçiş sayısından okunabilen eğilimin
+ötesine ne katıyor?** Naif tabanı geçip geçmediği bu yüzden anlamlı.
+
+`run_model_a.py` özniteliklerini "meta olmayan her sütun" diye seçiyordu:
+
+```python
+META_COLUMNS = {"cutter", "cut", "vb_um", "flute_spread_um"}
+feature_columns = [c for c in data.columns if c not in META_COLUMNS]
+```
+
+Faz 04c'de, Model B-2'nin iki veri setini birleştirebilmesi için PHM
+tablosuna `run_time` ve `cum_time` sütunları eklendi. Model A onları
+**sessizce öznitelik olarak yuttu**: 168 → 170.
+
+`cum_time` PHM'de geçiş sayısının neredeyse birebir monoton bir fonksiyonu —
+yani naif tabanın girdisinin ta kendisi. Model A artık "sensörler ne katıyor"
+sorusunu ölçmüyordu; tabanın bilgisini hazır alıp üstüne sensör ekliyordu.
+
+Etkisi, MAE'yi **iyileştirdiği** için fark edilmesi zor:
+
+| Model | 170 öznitelik (kirli) | 168 öznitelik (doğru) |
+|---|---:|---:|
+| 1 · GBM (ham) | 19,18 | **19,91** |
+| 2 · GBM + monoton | 19,72 | **20,74** |
+| 3 · GBM + normalize + monoton | 19,71 | **19,55** |
+
+Hata sistemi olduğundan **iyi** gösteriyordu — ve tam da naif tabanla
+karşılaştırmanın anlamını yok ederek.
+
+**Nasıl yakalandı:** Faz 06 denetiminde üç betik yeniden çalıştırılıp kayıtlı
+tablolarla karşılaştırıldı. Model A değişti, ötekiler değişmedi. İlk şüphe
+`skew`/`kurtosis` korumasıydı (Faz 04b'deki kaymanın sebebi) ama koruma PHM
+verisinde **hiç** devreye girmiyor — sıfır hücre. Kesin ipucu
+`model_a_channels.csv`'nin değişmemiş olmasıydı: kanal alt kümeleri
+`select_channels` ile kanal önekine göre seçiliyor, `run_time`/`cum_time`
+hiçbir kanal önekiyle eşleşmediği için o tabloya hiç girmemişti. Ana tablo
+değişip alt küme tablosu değişmiyorsa, değişen şey kanal özniteliği değildir.
+
+**Düzeltme:** iki sütun `META_COLUMNS`'a eklendi. README'deki Model A
+sayıları zaten doğruydu (168 öznitelikli koşudan geliyorlardı); değişen kod
+onlardan uzaklaşmıştı. Kod düzeltilince tablo birebir geri geldi.
+
+> **Ders:** "meta olmayan her sütun özniteliktir" kuralı, tabloya sonradan
+> sütun ekleyen her değişiklikte sessizce bozulur. Öznitelik kümesi ya açıkça
+> listelenmeli ya da dışlama listesi tablodan türetilmelidir.
+
+### 4. Kabul kriterinin ulaşılamaz olması (Faz 04)
 
 Faz 00'da konan "gecikme ≤ 5 geçiş" hedefi, etiketin kendi ölçüm gürültüsünün
 altında doğruluk istiyordu. Ölçüldü, ulaşılamaz olduğu gösterildi ve
 overshoot (µm) metriğiyle değiştirildi. Ayrıntı yukarıda, Faz 04 bölümünde.
 
-### 4. PHM birleştirmenin reddi (Faz 04c)
+### 5. PHM birleştirmenin reddi (Faz 04c)
 
 Denendi, ölçüldü, üç ağırlıkta da işe yaramadı ve alarm davranışını bozdu.
 Ayrıntı yukarıda, Faz 04c bölümünde. Olumsuz sonuç da sonuçtur.
