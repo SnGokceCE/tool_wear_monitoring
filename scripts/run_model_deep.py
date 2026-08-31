@@ -43,6 +43,13 @@ from tcm.models.gbm import make_gbm_small
 PARAMETER_COLUMNS = ["material", "feed", "doc", "rpm", "cum_time"]
 PROTOCOLS = {"vaka-dışı": "case", "koşul-dışı": "condition", "malzeme-dışı": "material"}
 
+# Model adlari tablo ANAHTARI olarak kullaniliyor (hüküm hangi satira yazilacak,
+# hangi satirlar devralinacak). Tekrar eden metin literalleri sessiz hataya yol
+# aciyordu: adi bir yerde degistirip digerini unutmak eslesmeyi bozar ve satir
+# hüküm almadan gecer. Tek kaynaktan tanimli.
+CANDIDATE_MODEL = "CNN + GRU"      # sinanan model - hüküm YALNIZCA buna ait
+REFERENCE_MODEL = "gradyan artırma"  # kiyas cizgisi - hiçbir zaman hüküm tasimaz
+
 
 def main(argv: list[str] | None = None) -> int:
     setup_console()
@@ -108,8 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         gbm_time = time.time() - started
 
         rows = [
-            {"model": "gradyan artırma", "süre_s": round(gbm_time, 1), **gbm_scores},
-            {"model": "CNN + GRU", "süre_s": round(deep_time, 1), **deep_scores},
+            {"model": REFERENCE_MODEL, "süre_s": round(gbm_time, 1), **gbm_scores},
+            {"model": CANDIDATE_MODEL, "süre_s": round(deep_time, 1), **deep_scores},
         ]
         summary = pd.DataFrame(rows)[
             ["model", "mae_um", "rmse_um", "abs_overshoot_um", "süre_s"]
@@ -140,9 +147,9 @@ def main(argv: list[str] | None = None) -> int:
 
         summary["sinav"] = exam
         summary["karar"] = ""
-        summary.loc[summary["model"] == "CNN + GRU", "karar"] = verdict
+        summary.loc[summary["model"] == CANDIDATE_MODEL, "karar"] = verdict
         summary["mae_std"] = 0.0
-        summary.loc[summary["model"] == "CNN + GRU", "mae_std"] = spread
+        summary.loc[summary["model"] == CANDIDATE_MODEL, "mae_std"] = spread
         summary["tohum_sayisi"] = len(seeds)
         summary["tohumlar"] = ";".join(str(s) for s in seeds)
         all_rows.append(summary)
@@ -299,7 +306,14 @@ def _merge_with_existing(
     if "git_hash" in carried.columns:
         carried["git_hash"] = carried["git_hash"].fillna("önceki çalıştırma (künyesiz)")
     if "karar" in carried.columns:
-        carried["karar"] = carried["karar"].fillna("saçılım ölçülmedi")
+        # Hüküm YALNIZCA aday modele aittir; referans (gradyan artırma)
+        # satirlari hiçbir zaman hüküm taşımaz, boş kalmalıdır. Ayrımı
+        # yapmadan doldurmak referans satırlarını da "ölçülmedi" diye
+        # etiketliyordu - ölçülecek bir şey olmadığı halde.
+        candidate = carried["model"] == CANDIDATE_MODEL
+        carried.loc[candidate, "karar"] = (
+            carried.loc[candidate, "karar"].fillna("saçılım ölçülmedi")
+        )
 
     print(f"\nDevralınan sınavlar (bu çalıştırmada yeniden ölçülmedi): "
           f"{sorted(carried['sinav'].unique())}")
@@ -315,7 +329,7 @@ def _verdict(combined: pd.DataFrame) -> None:
     print("\nMAE (µm):")
     print(pivot.to_string(float_format=lambda v: f"{v:9.2f}"))
 
-    deep = combined[combined["model"] == "CNN + GRU"]
+    deep = combined[combined["model"] == CANDIDATE_MODEL]
     print("\nHüküm (saçılım ölçütüyle):")
     for row in deep.itertuples(index=False):
         note = (

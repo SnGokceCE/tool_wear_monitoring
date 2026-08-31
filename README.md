@@ -51,10 +51,13 @@ ve LightGBM / scikit-learn / NumPy / pandas / SciPy / PyTorch sürümleri.
 Üç uyarı:
 
 - **Faz 04 ve 04b–04d sonuçları künye eklenmeden önce (28 Ağustos 2026)
-  üretildi.** Sayıları geçerli — öznitelik tablosu ve model kodu o günden beri
-  değişmedi, Faz 06'daki refaktör birebir aynı tabloyu ürettiği doğrulanarak
-  yapıldı — ama künyeleri kayıtlı değil. Yeniden çalıştırılırlarsa künye
-  kazanırlar.
+  üretildi** ve künyesizliğin bedeli somut olarak görüldü: Faz 04b tablosunun
+  dokuz hücresi, `skew`/`kurtosis` koruması eklenmeden önceki kodla üretilmiş
+  eski değerleri taşıyordu. 31 Ağustos'ta teşhis edilip
+  `reports/model_b1_summary.csv` ile eşitlendi (ayrıntı Faz 04b bölümünde).
+  Künye kayıtlı olsaydı bu, üç gün değil bir bakışta anlaşılırdı.
+  **Faz 04, 04c ve 04d tabloları aynı riski taşıyor ve henüz kontrol
+  edilmedi** — bu betiklerin hiçbirinde künye yok.
 - **Faz 09 sayıları 31 Ağustos 2026'da değişti** (kilitlenme hatası
   düzeltildi). Eski ve yeni değerlerin karşılaştırması "Yol boyunca yanlış
   çıkan şeyler" bölümünde.
@@ -216,21 +219,26 @@ MAE (µm), üç ayrı sınav:
 | sensör + parametre | 148 | 139,42 | 163,99 | 226,66 |
 | sensör + parametre + süre | 149 | 138,47 | 164,27 | 271,49 |
 
-> **UYARI — sayılar açıklanmamış bir kayma içeriyor (31 Ağustos 2026).**
-> Yukarıdaki değerler `reports/model_b1_summary.csv` dosyasından, 31 Ağustos
-> 2026'da `b5ff7e8` üzerine commit edilmemiş Faz 06 değişiklikleriyle yapılan
-> koşudan geliyor. Betik iki kez çalıştırıldı ve CSV'yi birebir yeniden üretti,
-> yani koşu deterministik.
+> **Düzeltildi (31 Ağustos 2026).** Bu tablo bir süre `145,38 / 173,26 /
+> 221,34` gibi **başka** sayılar içeriyordu. Sebep teşhis edildi: o değerler,
+> `skew`/`kurtosis` koruması eklenmeden **önceki** kodla üretilmişti.
 >
-> Ancak README'de daha önce **başka** sayılar yazıyordu (`145,38 / 173,26 /
-> 221,34` gibi) ve o sayıların hangi koşudan geldiği kayıtlı değil. İki koşu
-> arasındaki fark **0,14 – 6,69 µm** aralığında; en büyüğü `sadece sensör`
-> satırının koşul-dışı hücresinde (173,26 → 166,57). Fark gürültü olamaz —
-> tohum sabit ve koşu deterministik — dolayısıyla arada bir kod ya da veri
-> değişikliği olmuş olmalı. **Sebep henüz teşhis edilmedi**; bkz. `NEXT.md`.
+> Koruma `cd9912b` (Faz 04b) commit'inde eklendi: neredeyse sabit bir sinyalde
+> çarpıklık ve basıklık tanımsızdır — payda sıfıra gider, SciPy güvenilmez sayı
+> döndürür. NASA'nın **`smcDC`** (DC iğ motor akımı) kanalı 145 koşunun
+> 23'ünde bu durumda; koruma o hücrelerde 0 döndürüyor (2 öznitelik × 23 satır
+> = 46 hücre).
 >
-> Aşağıdaki üç bulgunun yönü bu kaymadan etkilenmiyor, ama metindeki tek tek
-> sayılar eski koşuya ait olabilir.
+> Bu, gözlenen desenin tamamını açıklıyor: değişen dokuz hücrenin hepsi
+> **sensör özniteliği içeren** satırlarda, `naif taban` ve `parametre + süre`
+> satırları ise değişmemiş — çünkü koruma yalnızca sensör özniteliklerine
+> dokunuyor. Doğrulama: koruma koddan geçici olarak çıkarılıp tablo yeniden
+> üretildiğinde eski dokuz değerin **dokuzu da virgülden sonrasına kadar**
+> yeniden elde edildi.
+>
+> **Doğru olan yukarıdaki (korumalı) sayılardır.** Koruma öncesi değerler,
+> sayısal olarak güvenilmez skew/kurtosis girdileriyle eğitilmiş modellerden
+> geliyordu.
 
 ### Üç bulgu
 
@@ -245,15 +253,28 @@ Bu, istenen girdi tanımının (malzeme + ilerleme + kesme parametreleri)
 **eksik** olduğu anlamına gelir: kümülatif kesme süresi olmadan çalışmaz.
 Sahada bilinen bir değerdir (yeni takımda sayaç sıfırlanır).
 
-**2. NASA'da 5 girdilik parametre modeli, 144 öznitelikli sensör modelini
-eziyor** — ve sensör eklemek onu bozuyor (108,38 → 138,61).
+**2. BİLİNEN koşullarda 5 girdilik parametre modeli, 144 öznitelikli sensör
+modelini açık farkla geçiyor** — ve sensör eklemek onu bozuyor.
+
+| Girdi | vaka-dışı | koşul-dışı |
+|---|---:|---:|
+| parametre + süre (5) | **108,38** | **114,19** |
+| sadece sensör (144) | 140,19 | 166,57 |
+| sensör + parametre + süre (149) | 138,47 | 164,27 |
+
+Sensör eklemek parametre modelini 108,38 → 138,47 µm'ye **kötüleştiriyor**:
+149 özniteliğin 144'ü gürültü taşıyor ve modelin dikkatini dağıtıyor.
 
 Sebebi NASA'nın 250 Hz örneklemesi. PHM'de (50 kHz) sensörler naif tabanı
 geçmişti; burada geçemiyor. Sensörün değeri, sensörün kalitesine bağlı.
 
-**3. Ama malzeme değişince tablo tersine dönüyor.** Görülmemiş malzemede
+Bu üstünlüğün **yalnızca bilinen koşullar için** geçerli olduğuna dikkat: bir
+sonraki bulgu tabloyu tersine çeviriyor ve teslim edilen model o yüzden
+parametre modeli değil (bkz. Faz 06).
+
+**3. Malzeme değişince tablo tersine dönüyor.** Görülmemiş malzemede
 parametre modeli çöküyor (388,16 — naif tabandan bile kötü), sensör modeli
-en iyisi oluyor (221,34).
+en iyisi oluyor (216,85).
 
 Sebep: parametre modeli dökme demirin aşınma hızını öğrenip çeliğe uyguluyor
 ve yanılıyor. Sensör modeli hızı çıkarsamak yerine **durumu ölçtüğü** için
@@ -265,11 +286,23 @@ malzemede parametre tabanlı model güvenilmez; orada yalnızca sensör işe yar
 ### Yan gözlemler
 
 - `cum_time` öznitelik öneminde 1. sırada; `feed` ve `rpm` sıfır. (`rpm` NASA'da
-  sabit olduğu için sıfır çıkması beklenen davranış.)
-- Aşırı aşınmış koşular MAE'yi ikiye katlıyor: VB ≤ 600 µm ile sınırlandığında
-  (126/145 koşu) sensör modelinin MAE'si 140,45 → **78,46**'ya düşüyor.
-- Sensörden malzeme tahmini %79,5 doğruluk (taban %67,6) — sinyal malzemeyi
-  kısmen ele veriyor ama güçlü değil.
+  sabit olduğu için sıfır çıkması beklenen davranış.) —
+  `reports/model_b1_importance.csv`
+
+Aşağıdaki iki gözlem **elle yapılmış, betiğe girmemiş** analizlerden geliyor;
+kayıtlı bir çıktı dosyaları yok ve yukarıdaki koruma düzeltmesinden önce
+üretildikleri için sayıları da güncel olmayabilir. Yeniden üretilmeden rapora
+alınmamalıdır:
+
+- *(doğrulanmamış)* Aşırı aşınmış koşular MAE'yi ikiye katlıyor: VB ≤ 600 µm
+  ile sınırlandığında (126/145 koşu) sensör modelinin MAE'si 140,45 →
+  **78,46**'ya düşüyor.
+- *(doğrulanmamış)* Sensörden malzeme tahmini %79,5 doğruluk (taban %67,6) —
+  sinyal malzemeyi kısmen ele veriyor ama güçlü değil.
+
+Aynı şekilde, yukarıdaki 1. bulgudaki "kesme parametreleri tek başına MAE
+205 µm" değeri de kayıtlı tabloda yok (tablo yalnızca `parametre + süre`
+satırını içeriyor) ve doğrulanmamıştır.
 
 ## Faz 04c — Model B-2 sonuçları (28 Ağustos 2026)
 
@@ -380,6 +413,67 @@ malzemede güvenilir değil.
 **3. Karar eşiği henüz ayarlanmadı.** Hem A'da (VB eşiği) hem B'de (olasılık
 eşiği) varsayılan değerler kullanılıyor. Kaçırılan aşınma yanlış alarmdan
 pahalı olduğuna göre eşik güvenli tarafa kaydırılmalı — Faz 09'un işi.
+
+## Faz 05 — derin öğrenme (31 Ağustos 2026)
+
+`python scripts/run_model_deep.py --seeds 3 --save`
+
+Gradyan artırmadan farkı: öznitelikleri biz tanımlamıyoruz. Orada "RMS hesapla,
+3. mertebe enerjisini al" diyorduk; burada 1B-CNN + GRU ham sinyalden neye
+bakacağını kendisi öğreniyor. Kesme parametreleri evrişimden geçmez, GRU
+çıktısına eklenir.
+
+Aynı üç sınav, aynı protokol, aynı metrikler — yoksa karşılaştırma anlamsız
+olurdu.
+
+### Neden üç tohum
+
+145 örnekle derin ağ eğitildiğinde tek bir koşunun sonucu güvenilir değil:
+ağırlık başlangıcı ve yığın sırası şansa bağlı. Model üç tohumla (42, 43, 44)
+tekrarlanıp **ortalama ve saçılım** birlikte raporlanıyor.
+
+Ölçüt şu: **saçılım, iki model arasındaki farktan büyükse "kazandı" demek
+anlamsızdır** — sonuç modelden değil, rastgele başlangıçtan geliyor olabilir.
+
+### Sonuç
+
+MAE (µm), CNN+GRU üç tohumun ortalaması ± saçılım:
+
+| Sınav | CNN + GRU | Gradyan artırma | Fark | Saçılım | Hüküm |
+|---|---:|---:|---:|---:|---|
+| vaka-dışı | **123,53** | 144,06 | 20,53 | ±2,12 | **GEÇTİ** |
+| koşul-dışı | **137,44** | 159,74 | 22,30 | ±10,17 | **GEÇTİ** |
+| malzeme-dışı | 252,26 | 257,65 | 5,38 | ±18,29 | **KARARSIZ** |
+
+**CNN+GRU üç sınavın ikisinde gradyan artırmayı kesin olarak geçti.**
+
+Malzeme-dışı sınavında fark (5,38 µm) saçılımın (±18,29) çok altında —
+bu sınavda hangi modelin iyi olduğu **ölçülemiyor**. "Geçti" demek yanlış
+olurdu; "geçemedi" demek de. Tablodaki hüküm bu yüzden KARARSIZ.
+
+### Bu beklenen sonuç değildi
+
+Kod yazılırken beklenti açıkça düşüktü: "145 örnek derin öğrenme için çok
+küçük, ağ ezberler". Ölçüm bunu **iki sınavda çürüttü**. Muhtemel sebep,
+modelin kasıtlı olarak küçük tutulması ve düzenlileştirmenin yüksek olması
+(dropout 0,3, weight decay 1e-3, erken durdurma yok).
+
+Yine de teslim edilen model **B-1 (gradyan artırma)**. Üç gerekçe:
+
+1. **Malzeme-dışı sınavında üstünlük gösterilemedi** — ve teslim senaryosu
+   tam olarak o sınav (sahada alüminyum var, eğitimde yok).
+2. **Maliyet:** CNN+GRU vaka-dışı sınavında 2399 s, gradyan artırma 2,8 s.
+   Yaklaşık 850 kat.
+3. **Açıklanabilirlik:** gradyan artırma hangi özniteliği ne kadar kullandığını
+   raporlayabiliyor; jüriye savunulacak bir sistemde bu ağır basıyor.
+
+Bulgu raporlanacak: derin öğrenme bu veri ölçeğinde **çalıştı**, ama teslim
+kararını değiştirecek yerde (görülmemiş malzeme) fark ölçülemedi.
+
+### Künye
+
+`reports/model_deep_summary.csv` + `reports/model_deep_summary.provenance.json`
+— git `74d4de8` (temiz çalışma ağacı), 3 tohum, 120 epoch, PyTorch 2.13.0.
 
 ## Faz 06 — sistemi ayağa kaldır (31 Ağustos 2026)
 

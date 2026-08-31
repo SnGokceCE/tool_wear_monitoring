@@ -1,10 +1,10 @@
 {
-  "git_hash": "b5ff7e8ffb4b60bcf4c4f80ef9fef53d8075647e",
-  "git_dirty": true,
-  "config_path": "D:\\Tomtaş Havacılık Staj\\takim-asinmasi\\config\\default.yaml",
-  "config_digest": "07dbd76c01855a1f358c740542fd6792fc24e6a53e542676bc1f6f836e3aa874",
-  "command": "scripts/run_model_deep.py --protocols koşul-dışı,malzeme-dışı --seeds 3 --epochs 120 --save",
-  "timestamp": "2026-08-31T12:24:43+00:00",
+  "git_hash": "74d4de86340b0a9d14b5226a75acfa9203d86f4e",
+  "git_dirty": false,
+  "config_path": "config/default.yaml",
+  "config_digest": "97253f2942955bcac9d845b5d12cbb1203398690d1674f59443a9a3580e24988",
+  "command": "scripts/run_model_deep.py --protocols vaka-dışı --seeds 3 --epochs 120 --save",
+  "timestamp": "2026-08-31T13:24:56+00:00",
   "python": "3.13.5",
   "versions": {
     "lightgbm": "4.7.0",

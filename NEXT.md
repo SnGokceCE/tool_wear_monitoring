@@ -1,185 +1,128 @@
 # Sıradaki iş
 
-Durum: 31 Ağustos 2026, Faz 06 oturumunun sonu.
-
-Bu dosya bir sonraki oturumun nereden devam edeceğini söyler. **Önce "Bu
-oturumda tamamlananlar" bölümünü okuyun** — orada listelenen işler yeniden
-yapılmamalı.
+Durum: 31 Ağustos 2026. **Faz 06 kapandı.** Sıradaki iş rapor (Faz 11).
 
 ---
 
-## AÇIK — 1. Model B-1 sayılarındaki açıklanmamış kayma
+## AÇIK — 1. Faz 04, 04c ve 04d tabloları künye kontrolünden geçmedi
 
-**Öncelik: yüksek.** Rapora giren sayıları doğrudan etkiliyor.
+**Öncelik: yüksek. Rapora geçmeden önce yapılmalı.**
 
-`scripts/run_model_b1.py` 31 Ağustos'ta yeniden çalıştırıldı ve
-`reports/model_b1_summary.csv` dosyasını **birebir** yeniden üretti (koşu
-deterministik, tohum 42 sabit). Ama README'de o güne kadar duran sayılar
-farklıydı:
+Faz 04b tablosunda dokuz hücrenin eski koddan kaldığı bulundu ve düzeltildi
+(aşağıda, "tamamlananlar"). Aynı risk denetlenmemiş üç bölümde duruyor:
 
-| Girdi kümesi | Sınav | Eski README | Yeni koşu | Fark |
-|---|---|---:|---:|---:|
-| sadece sensör | vaka-dışı | 145,38 | 140,19 | 5,19 |
-| sadece sensör | koşul-dışı | 173,26 | 166,57 | **6,69** |
-| sadece sensör | malzeme-dışı | 221,34 | 216,85 | 4,49 |
-| sensör + parametre | vaka-dışı | 144,04 | 139,42 | 4,62 |
-| sensör + parametre | koşul-dışı | 159,52 | 163,99 | 4,47 |
-| sensör + parametre | malzeme-dışı | 226,15 | 226,66 | 0,51 |
-| sensör + par. + süre | vaka-dışı | 138,61 | 138,47 | 0,14 |
-| sensör + par. + süre | koşul-dışı | 164,82 | 164,27 | 0,55 |
-| sensör + par. + süre | malzeme-dışı | 271,91 | 271,49 | 0,42 |
+| Bölüm | Rapor dosyası | Betik | Künye |
+|---|---|---|---|
+| Faz 04 · Model A | `reports/model_a_*.csv` | `run_model_a.py` | **yok** |
+| Faz 04c · Model B-2 | `reports/model_b2_summary.csv` | `run_model_b2.py` | **yok** |
+| Faz 04d · sınıflandırma | `reports/classification_summary.csv` | `run_classification.py` | **yok** |
 
-`naif taban` ve `parametre + süre` satırları **değişmedi**. Bu, teşhisin en
-güçlü ipucu: değişen satırların hepsi **sensör özniteliği içeren** satırlar.
-Sensör içermeyen iki satır sabit kalmış.
+Faz 04b'deki kayma, `skew`/`kurtosis` korumasının `cd9912b`'de eklenmesinden
+kaynaklanıyordu. **Faz 04 (Model A) o commit'ten öncedir** (`7e833be`,
+28 Ağu 11:32) — yani README'deki Model A tablosu büyük olasılıkla koruma
+öncesi sayılar içeriyor. Model A PHM verisini kullanıyor; korumanın PHM
+kanallarında da devreye girip girmediği kontrol edilmeli (NASA'da yalnızca
+`smcDC` kanalında, 23/145 satırda tetikleniyordu).
 
 ### Yapılacak
 
-1. **İki koşunun öznitelik sütun listelerini karşılaştır.** `run_model_b1.py`
-   sensör sütunlarını `data[c].notna().any()` süzgeciyle veriden türetiyor
-   ([`scripts/run_model_b1.py`](scripts/run_model_b1.py) içindeki
-   `sensor_columns`). Sütun sayısı ya da hangi sütunların NaN olduğu
-   değiştiyse model farklı girdi görmüş olur. README "144 öznitelik" diyor —
-   yeni koşuda gerçekten 144 mü, kontrol et:
+1. Üç betiği `--save` ile yeniden çalıştır.
+2. Kayıtlı CSV'lerle README tablolarını karşılaştır.
+3. Fark varsa: README'yi CSV'ye eşitle ve Faz 04b'dekine benzer bir düzeltme
+   notu yaz.
+4. Üç betiğe künye ekle (`tcm.provenance.run_stamp` / `format_stamp`) —
+   `run_model_deep.py` ve `train_model.py` örnek alınabilir.
 
-   ```bash
-   python -c "import pandas as pd; from tcm.serving import resolve_feature_columns; d=pd.read_csv('data/processed/nasa_run_features.csv'); print(len(resolve_feature_columns(d,'sensor+param+time')))"
-   ```
-
-2. **Öznitelik tablosunun git geçmişini kontrol et.**
-   `data/processed/nasa_run_features.csv` git dışında, ama onu üreten kod
-   değil. `git log -p -- src/tcm/features/` ile 28–31 Ağustos arasında
-   `timedomain.py` / `spectral.py` içinde bir değişiklik olup olmadığına bak.
-   Özellikle `time_domain_features` içindeki `shape_defined` koruması (sabit
-   sinyalde skew/kurtosis 0 döndürme) şüpheli: sensör özniteliklerini
-   etkiler, parametre sütunlarını etkilemez — gözlenen desenle birebir uyuyor.
-
-3. Sebep bulunduğunda:
-   - README'deki **Faz 04b tablosunun üstündeki UYARI notunu kaldır**.
-   - Aynı bölümdeki satır içi sayıları düzelt (aşağıda madde 3).
-   - `run_model_b1.py`'ye künye (`tcm.provenance.run_stamp`) ekle ki bir daha
-     olmasın — Faz 04/04b/04c/04d betiklerinin hiçbirinde künye yok.
-
-**Not:** Faz 06 teslim modeli bu kaymadan **etkilenmiyor**. Paket, mevcut
-`nasa_run_features.csv` ile eğitildi ve künyesi
-`reports/model_b1_package.json` içinde kayıtlı (config sha256 + git hash +
-joblib sha256). Etkilenen şey yalnızca README'nin Faz 04b tablosu.
-
----
-
-## AÇIK — 2. README'nin satır içi sayıları
-
-Madde 1'e bağlı, ondan sonra yapılmalı.
-
-`README.md` Faz 04b bölümünde iki cümle eski koşunun sayılarını içeriyor:
-
-- "**sensör modelini eziyor** — ve sensör eklemek onu bozuyor (108,38 →
-  **138,61**)" → yeni koşuda 138,47
-- "sensör modeli en iyisi oluyor (**221,34**)" → yeni koşuda 216,85
-
-Ayrıca doğrulanamayan bir iddia var: "*VB ≤ 600 µm ile sınırlandığında
-(126/145 koşu) sensör modelinin MAE'si 140,45 → 78,46'ya düşüyor*". Bu analiz
-`run_model_b1.py` içinde **yok**; elle yapılmış ve kaydedilmemiş. Ya betiğe
-eklenip yeniden üretilmeli ya da README'den çıkarılmalı.
-
----
-
-## AÇIK — 3. Faz 05: `vaka-dışı` sınavı üç tohumla ölçülmedi
-
-`koşul-dışı` ve `malzeme-dışı` üç tohumla ölçüldü
-(`reports/model_deep_summary.csv`). `vaka-dışı` satırı hâlâ eski tek tohumlu
-koşudan devralınmış durumda:
-
-| alan | değer |
-|---|---|
-| `karar` | `saçılım ölçülmedi` |
-| `mae_std` | boş (NaN) |
-| `tohum_sayisi` | **boş (NaN)** — `1` değil |
-| `git_hash` | `önceki çalıştırma (künyesiz)` |
-
-`tohum_sayisi` kasıtlı olarak boş bırakıldı: eski koşuda tohum sayısı
-**kaydedilmemişti**. `--seeds` varsayılanı 1 olduğu için muhtemelen 1'dir ama
-bu bir çıkarım, ölçüm değil; künyeye çıkarım yazılmadı.
-
-**Bu oturumda üç tohumlu `vaka-dışı` koşusu arka planda başlatıldı ama
-bitmedi** (~1 saat sürüyor, 15 katlama × 3 tohum). Yeniden çalıştırmak için:
+Hızlı kontrol:
 
 ```bash
-python scripts/run_model_deep.py --protocols "vaka-dışı" --seeds 3 --epochs 120 --save
+python scripts/run_model_a.py --save
+python scripts/run_model_b2.py --save
+python scripts/run_classification.py --save
+git diff --stat reports/
 ```
 
-`--save` diğer iki sınavın satırlarını korur (`_merge_with_existing`).
-Bittiğinde README'ye Faz 05 bölümü yazılmalı — şu an **README'de Faz 05
-bölümü yok**, sadece durum tablosunda "tamamlandı" yazıyor.
+`git diff` boş çıkarsa tablolar zaten güncel demektir.
 
-Üç tohumla ölçülen iki sınavın sonucu:
+---
 
-| Sınav | CNN+GRU | GBM | Fark | Saçılım | Hüküm |
-|---|---:|---:|---:|---:|---|
-| koşul-dışı | 137,44 | 159,74 | 22,30 | ±10,17 | **GEÇTİ** |
-| malzeme-dışı | 252,26 | 257,65 | 5,38 | ±18,29 | **KARARSIZ** |
+## AÇIK — 2. Doğrulanmamış üç sayı README'de duruyor
+
+Faz 04b "Yan gözlemler" bölümünde `(doğrulanmamış)` diye işaretlendiler.
+Elle yapılmış, betiğe girmemiş analizlerden geliyorlar ve koruma
+düzeltmesinden önce üretildikleri için sayıları da güncel olmayabilir:
+
+- VB ≤ 600 µm ile sınırlandığında sensör modeli MAE 140,45 → 78,46
+- Sensörden malzeme tahmini %79,5 doğruluk (taban %67,6)
+- Kesme parametreleri **tek başına** MAE 205 µm
+
+Her biri ya `run_model_b1.py` içine alınıp yeniden üretilmeli ya da README'den
+çıkarılmalı. Üçüncüsü kolay: tabloya bir `sadece parametre` satırı eklemek
+yeterli.
+
+---
+
+## AÇIK — 3. Kod temizliği (sona bırakıldı)
+
+- `src/tcm/decision.py` içindeki `_flags_by_group = alarm_flags` geriye dönük
+  takma adı artık kullanılmıyor; kaldırılabilir.
+- `src/tcm/datasets/nasa.py` içindeki `ensure_not_used_for_training()` artık
+  anlamsız — NASA eğitimde kullanılıyor (`use_for_training: true`) ve fonksiyon
+  hiçbir yerden çağrılmıyor.
+- Faz 04/04b/04c/04d betikleri `META_COLUMNS` / `PARAMETER_COLUMNS` /
+  `TIME_COLUMN` sabitlerini tekrar tekrar tanımlıyor;
+  `tcm.serving.resolve_feature_columns` bunları zaten sağlıyor.
 
 ---
 
 ## Bu oturumda TAMAMLANANLAR — yeniden yapmayın
 
+### Model B-1 sayı kayması — TEŞHİS EDİLDİ VE DÜZELTİLDİ
+
+README'deki dokuz hücre kayıtlı CSV ile uyuşmuyordu (0,14–6,69 µm fark,
+yalnızca sensör içeren satırlarda).
+
+**Sebep:** `skew`/`kurtosis` koruması `cd9912b` (Faz 04b) commit'inde eklendi.
+Neredeyse sabit sinyalde bu iki ölçü tanımsızdır; SciPy güvenilmez sayı
+döndürür. NASA'nın `smcDC` (DC iğ motor akımı) kanalı 145 koşunun 23'ünde bu
+durumda — 2 öznitelik × 23 satır = 46 hücre. Koruma yalnızca sensör
+özniteliklerine dokunduğu için `naif taban` ve `parametre + süre` satırları
+değişmemişti; desen buydu.
+
+**Doğrulama:** koruma koddan geçici olarak çıkarılıp öznitelik tablosu yeniden
+üretildi ve B-1 çapraz doğrulaması tekrarlandı — eski dokuz değerin **dokuzu
+da virgülden sonrasına kadar** yeniden elde edildi.
+
+**Karar:** korumalı (mevcut CSV) sayılar doğru. README tablosu ve satır içi
+metinler eşitlendi, düzeltme notu yazıldı.
+
+### Faz 05 — üç sınav da üç tohumla ölçüldü, README bölümü yazıldı
+
+| Sınav | CNN+GRU | GBM | Fark | Saçılım | Hüküm |
+|---|---:|---:|---:|---:|---|
+| vaka-dışı | 123,53 | 144,06 | 20,53 | ±2,12 | GEÇTİ |
+| koşul-dışı | 137,44 | 159,74 | 22,30 | ±10,17 | GEÇTİ |
+| malzeme-dışı | 252,26 | 257,65 | 5,38 | ±18,29 | KARARSIZ |
+
+Künye temiz (git `74d4de8`, `git_dirty: false`). Teslim modeli yine de B-1;
+gerekçe README Faz 05 bölümünde.
+
 ### Latching hatası (dış değerlendirme) — DÜZELTİLDİ
 
-> Bu madde "yapılacaklar" listesinde duruyordu; bu oturumda **bitirildi**.
-> Aşağıdaki dört kanıtın dördü de doğrulandı.
-
-1. **Kod düzeltildi.** [`scripts/run_decision_rule.py:147`](scripts/run_decision_rule.py)
-   artık `alarm_flags(predicted, threshold, k, test["case"].to_numpy())`
-   çağırıyor; eskiden `apply_consecutive(predicted >= threshold, k)` idi ve
-   kilidi katlamanın tamamına uyguluyordu.
-2. **Regresyon testi yazıldı.** `tests/test_decision_rule_script.py` — 6 test,
-   betiği `importlib` ile **doğrudan çağırıyor**. Önceki test yalnızca
-   kütüphaneyi sınadığı için hatayı yakalayamamıştı.
-3. **Faz 09 tablosu yeniden hesaplandı.** `reports/decision_rule_summary.csv`
-   yenilendi; malzeme-dışı ayarlı eşik **22 kaçırılan / 44 yanlış alarm /
-   maliyet 154** (eskiden 11 / 48 / 103). Toplam maliyet 158 → 208, karar
-   kuralının kazancı −%22,5 → −%10,3. README hem Faz 09 bölümünde hem "Yol
-   boyunca yanlış çıkan şeyler" bölümünde eski/yeni karşılaştırmasıyla
-   güncellendi.
-4. **Başka çağrı yeri kalmadı.** `grep` ile doğrulandı: gruplamasız
-   `apply_consecutive` yalnızca `alarm_flags`'in kendi içinde çağrılıyor.
-
-**Kalan tek iş:** yukarıdaki madde 3'teki `vaka-dışı` derin öğrenme koşusu
-bittiğinde Faz 09 tablosunun etkilenmediğini teyit et (etkilenmemeli — farklı
-dosya, farklı betik).
+`run_decision_rule.py` artık `alarm_flags(..., groups=case)` çağırıyor.
+`tests/test_decision_rule_script.py` betiği doğrudan çağıran 6 regresyon
+testiyle eklendi. Faz 09 tablosu yeniden hesaplandı: malzeme-dışı ayarlı eşik
+**22 kaçırılan / 44 yanlış alarm / maliyet 154** (eskiden 11/48/103), toplam
+maliyet 158 → 208. README'nin hem Faz 09 hem "Yol boyunca yanlış çıkan şeyler"
+bölümü güncel.
 
 ### `conservative` eşik kuralı — KALDIRILDI
 
-Aktif eşik artık **`case` kalibrasyonu, 222 µm**. `material` kalibrasyonu
-(156 µm) pakette ve künyede duruyor ama varsayılan değil.
-`config/default.yaml` içindeki `serving.calibration` artık yalnızca `"case"`
-ve `"material"` kabul ediyor. Gerekçe README'nin "Yol boyunca yanlış çıkan
-şeyler" bölümünde, tam ölçüm tablosuyla.
+Aktif eşik **`case` kalibrasyonu, 222 µm**. `material` (156 µm) pakette ve
+künyede duruyor ama varsayılan değil. Gerekçe ve ölçüm tablosu README'de.
+Gelecek çalışma notu: maliyet fonksiyonuna takım bazında ömür israfı terimi.
 
-**Gelecek çalışma olarak not düşüldü:** maliyet fonksiyonuna takım bazında
-ömür israfı terimi eklenmeli. Şu anki fonksiyon yanlış alarmı **geçiş başına**
-sayıyor; ömrünün başında atılan bir takım "1 yanlış alarm" görünüyor. Bu
-eksiklik giderildiğinde `material` kalibrasyonu yeniden değerlendirilmeli.
+### README — provenance, Faz 05, Faz 06, hatalar bölümleri YAZILDI
 
-### README bölümleri — provenance ve Faz 06 YAZILDI
-
-- "Sonuçların kaynağı (provenance)" bölümü yazıldı: her README tablosunun
-  hangi rapor dosyasından ve hangi komuttan geldiği listeli.
-- "Faz 06 — sistemi ayağa kaldır" bölümü yazıldı.
-- "Yol boyunca yanlış çıkan şeyler" bölümü yazıldı (4 madde).
-- Durum tablosunda Faz 05 ve Faz 06 "tamamlandı" yapıldı.
-- **Eksik olan tek bölüm: Faz 05 sonuçları** (yukarıda madde 3).
-
-### Faz 06 altyapısı — TAMAM
-
-`scripts/train_model.py`, `scripts/predict.py`, `scripts/threshold_sweep.py`,
-`src/tcm/serving/`, `src/tcm/provenance.py`, `src/tcm/features/extract.py`,
-`src/tcm/evaluation/verdict.py`. 164 test geçiyor.
-
-Doğrulanmış olanlar:
-- Öznitelik tablosu refaktörü çıktıyı değiştirmedi (145×154, sütun sırası
-  dahil birebir aynı, en büyük sayısal fark 0).
-- Eğitim ve çıkarım aynı öznitelik kodunu kullanıyor
-  (`tests/test_serving.py::TestTrainingInferenceParity`).
-- Paket kaydet/yükle turu tahminleri koruyor.
-- Kapsam dışı uyarısı çalışıyor (görülmemiş malzeme ve koşul).
+Durum tablosu güncel. Eksik bölüm kalmadı; açık olan tek şey yukarıdaki
+1. ve 2. maddeler (denetlenmemiş tablolar ve doğrulanmamış üç sayı).
