@@ -1,0 +1,7 @@
+model,mae_um,rmse_um,abs_overshoot_um,süre_s,sinav,karar,mae_std,tohum_sayisi,tohumlar,git_hash
+gradyan artırma,159.74407283091526,207.80815326725167,150.0,1.9,koşul-dışı,,0.0,3.0,42;43;44,b5ff7e8ffb4b60bcf4c4f80ef9fef53d8075647e
+CNN + GRU,137.44087851151718,182.2197864175677,151.25,1031.8,koşul-dışı,GEÇTİ,10.165434639637892,3.0,42;43;44,b5ff7e8ffb4b60bcf4c4f80ef9fef53d8075647e
+gradyan artırma,257.6471311682424,334.03114001862764,370.0,0.4,malzeme-dışı,,0.0,3.0,42;43;44,b5ff7e8ffb4b60bcf4c4f80ef9fef53d8075647e
+CNN + GRU,252.26266176702487,338.1817418645964,301.6666666666667,111.1,malzeme-dışı,KARARSIZ,18.291064697650143,3.0,42;43;44,b5ff7e8ffb4b60bcf4c4f80ef9fef53d8075647e
+gradyan artırma,144.06029924484795,180.10337172285426,131.33333333333334,4.5,vaka-dışı,saçılım ölçülmedi,,,,önceki çalıştırma (künyesiz)
+CNN + GRU,123.11634530518856,156.8073716256571,132.88888888888889,3352.6,vaka-dışı,saçılım ölçülmedi,,,,önceki çalıştırma (künyesiz)

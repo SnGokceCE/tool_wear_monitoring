@@ -1,0 +1,19 @@
+{
+  "git_hash": "b5ff7e8ffb4b60bcf4c4f80ef9fef53d8075647e",
+  "git_dirty": true,
+  "config_path": "D:\\Tomtaş Havacılık Staj\\takim-asinmasi\\config\\default.yaml",
+  "config_digest": "07dbd76c01855a1f358c740542fd6792fc24e6a53e542676bc1f6f836e3aa874",
+  "command": "scripts/run_model_deep.py --protocols koşul-dışı,malzeme-dışı --seeds 3 --epochs 120 --save",
+  "timestamp": "2026-08-31T12:24:43+00:00",
+  "python": "3.13.5",
+  "versions": {
+    "lightgbm": "4.7.0",
+    "scikit-learn": "1.9.0",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "scipy": "1.18.1",
+    "torch": "2.13.0"
+  },
+  "epochs": 120,
+  "seeds": 3
+}

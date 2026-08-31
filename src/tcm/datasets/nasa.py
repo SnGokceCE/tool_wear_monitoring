@@ -117,6 +117,42 @@ class NASAMilling:
         return f"NASAMilling(mat_path={self.mat_path})"
 
 
+def run_table(
+    metadata: pd.DataFrame,
+    drop_unlabelled: bool = True,
+    drop_cases: tuple[int, ...] = (),
+) -> pd.DataFrame:
+    """``mill.mat`` alan adlarını projenin ortak koşu şemasına çevirir.
+
+    Neden ayrı bir fonksiyon: bu çeviri sözleşmenin parçası. ``VB`` mm'den
+    mikrometreye geçer, ``DOC`` küçük harfe iner, ``time`` koşu süresi olur.
+    Eğitim ve çıkarım bu çeviriyi ayrı ayrı yazsaydı - ki ilk taslakta öyleydi -
+    birinde ``VB * 1000``, diğerinde ham ``VB`` kalması hiçbir hata vermeden
+    modeli 1000 kat yanlış ölçekte çalıştırırdı.
+
+    ``entry`` sütunu korunur: ham sinyale erişim anahtarıdır.
+    """
+    frame = metadata
+    if drop_unlabelled:
+        frame = frame[frame["has_label"]]
+    if drop_cases:
+        frame = frame[~frame["case"].isin(drop_cases)]
+
+    return pd.DataFrame({
+        "entry": frame["entry"].to_numpy(),
+        "case": frame["case"].to_numpy(),
+        "run": frame["run"].to_numpy(),
+        # --- kesme parametreleri: Model B'nin girdileri ---
+        "material": frame["material"].to_numpy(),
+        "feed": frame["feed"].to_numpy(),
+        "doc": frame["DOC"].to_numpy(),
+        # --- koşu süresi; kümülatifi extract tarafında hesaplanır ---
+        "run_time": frame["time"].to_numpy(),
+        # --- etiket: mm -> um, PHM ile aynı birim ---
+        "vb_um": frame["VB"].to_numpy() * 1000.0,
+    })
+
+
 def ensure_not_used_for_training(config) -> None:
     """Yapılandırma NASA'yı eğitime açmışsa hata verir.
 

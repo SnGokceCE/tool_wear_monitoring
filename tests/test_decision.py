@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from tcm.decision import (
@@ -10,6 +11,7 @@ from tcm.decision import (
     apply_consecutive,
     choose_consecutive,
     choose_threshold,
+    oof_predictions,
 )
 
 
@@ -112,8 +114,8 @@ class TestLatchingAcrossToolsRegression:
         threshold = choose_threshold(truth, pred, 300.0, groups=groups)
 
         # Gruplar dikkate alınınca ikinci takım alarmsız kalabilmeli
-        from tcm.decision import _flags_by_group
-        flags = _flags_by_group(pred, threshold, 1, groups)
+        from tcm.decision import alarm_flags
+        flags = alarm_flags(pred, threshold, 1, groups)
         assert not flags[2] and not flags[3], "alarm ikinci takıma taştı"
 
     def test_without_groups_alarm_leaks_as_documented(self):
@@ -146,3 +148,101 @@ class TestConsecutiveSelection:
         pred = truth - 20
         k = choose_consecutive(truth, pred, 280.0, 300.0, candidates=(1, 2, 3))
         assert k in (1, 2, 3)
+
+
+class TestOutOfFoldPredictions:
+    """Eşiğin sızıntısız seçilmesinin dayanağı (Faz 06 ve Faz 09 ortak kodu).
+
+    Eşik, modelin hatasına göre ayarlanır. Model kendi eğitim verisinde
+    neredeyse hatasız göründüğü için, eşik oradan seçilirse aşınma sınırının
+    kendisine yapışır ve karar kuralı hiçbir şey düzeltmez. Katlama dışı
+    tahmin üretmenin tek sebebi budur.
+    """
+
+    def _table(self, n_cases=6, n_runs=8):
+        rows = []
+        for case in range(1, n_cases + 1):
+            for run in range(1, n_runs + 1):
+                rows.append({
+                    "case": float(case),
+                    "run": float(run),
+                    "material": 1.0 if case % 2 else 2.0,
+                    "x": float(run) + 0.1 * case,
+                    "vb_um": 40.0 * run,
+                })
+        return pd.DataFrame(rows)
+
+    class _Recorder:
+        """Hangi satırlarla eğitildiğini kaydeden sahte model."""
+
+        seen: list[set] = []
+
+        def fit(self, X, y, **_):
+            type(self).seen.append(set(X["x"].round(6)))
+            self._mean = float(np.mean(y))
+            return self
+
+        def predict(self, X):
+            return np.full(len(X), self._mean)
+
+    def test_every_row_gets_a_prediction_exactly_once(self):
+        data = self._table()
+        oof = oof_predictions(
+            data, "case", ["x"], lambda: self._Recorder(), min_groups=3
+        )
+        assert len(oof.y_pred) == len(data)
+        assert len(oof.y_true) == len(data)
+        assert oof.n_folds == data["case"].nunique()
+
+    def test_no_row_is_used_to_predict_itself(self):
+        """Sızıntı testi: bir katlamanın test satırları o katlamanın
+        eğitiminde bulunmamalı."""
+        data = self._table()
+        self._Recorder.seen = []
+
+        oof = oof_predictions(
+            data, "case", ["x"], lambda: self._Recorder(), min_groups=3
+        )
+
+        for held_out, train_rows in zip(sorted(data["case"].unique()),
+                                        self._Recorder.seen):
+            test_x = set(data.loc[data["case"] == held_out, "x"].round(6))
+            assert not (test_x & train_rows), \
+                f"katlama {held_out}: test satırları eğitime sızmış"
+        assert oof.split_column == "case"
+
+    def test_falls_back_when_there_are_too_few_groups(self):
+        """İki malzeme varken min_groups=3 istersek ``case``'e düşülür."""
+        data = self._table()
+        oof = oof_predictions(
+            data, "material", ["x"], lambda: self._Recorder(),
+            fallback_column="case", min_groups=3,
+        )
+        assert oof.fell_back
+        assert oof.split_column == "case"
+        assert oof.requested_column == "material"
+
+    def test_min_groups_two_keeps_the_material_split(self):
+        """Teslim senaryosu: dökme demirde eğit, çelikte ölç."""
+        data = self._table()
+        oof = oof_predictions(
+            data, "material", ["x"], lambda: self._Recorder(), min_groups=2
+        )
+        assert not oof.fell_back
+        assert oof.split_column == "material"
+        assert oof.n_folds == 2
+
+    def test_latch_groups_are_tools_not_folds(self):
+        """Alarm kilidi takım bazında işlemeli - katlama bazında değil."""
+        data = self._table()
+        oof = oof_predictions(
+            data, "material", ["x"], lambda: self._Recorder(), min_groups=2
+        )
+        assert set(np.unique(oof.groups)) == set(data["case"].unique())
+
+    def test_describe_mentions_the_fallback(self):
+        data = self._table()
+        oof = oof_predictions(
+            data, "material", ["x"], lambda: self._Recorder(), min_groups=3
+        )
+        assert "yeterli grup yok" in oof.describe()

@@ -3,6 +3,10 @@
 945 geçiş dosyasının her biri ~127 bin satır. Her çalıştırmada yeniden okumak
 anlamsız olduğu için sonuç bir kez üretilip ``data/processed`` altına yazılıyor.
 Faz 02'nin keşif betiği de, Faz 04'ün modeli de aynı tabloyu kullanır.
+
+Öznitelik hesabının kendisi burada DEĞİL, ``tcm.features.extract`` içinde:
+çıkarım hattı da aynı kodu çağırsın diye (bkz. o modülün açıklaması). Bu dosya
+yalnızca veri kümesine özgü sarmalayıcıları ve önbelleği tutar.
 """
 
 from __future__ import annotations
@@ -12,9 +16,9 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
+from tcm.datasets.nasa import run_table as nasa_run_table
 from tcm.datasets.phm2010 import PHM2010
-from tcm.features.spectral import order_band_energies
-from tcm.features.timedomain import frame_features, stable_region
+from tcm.features.extract import assemble_feature_table, run_feature_row
 
 
 def build_cut_features(
@@ -41,7 +45,6 @@ def build_cut_features(
         iterator = tqdm(refs, desc=f"{cutter}", disable=not show_progress)
         for ref in iterator:
             full = dataset.load_cut(cutter, ref.index)
-            frame = stable_region(full, keep=keep)
 
             row: dict[str, float] = {
                 "cutter": cutter,
@@ -51,16 +54,15 @@ def build_cut_features(
                 # aynı büyüklüğün olması gerekiyor. Dosya uzunluğundan hesaplanır.
                 "run_time": len(full) / sampling_rate_hz,
             }
-            row.update(frame_features(frame))
-
-            for channel in frame.columns:
-                bands = order_band_energies(
-                    frame[channel].to_numpy(),
+            row.update(
+                run_feature_row(
+                    full,
                     sampling_rate_hz=sampling_rate_hz,
                     rpm=rpm,
                     max_order=max_order,
+                    keep=keep,
                 )
-                row.update({f"{channel}_{name}": value for name, value in bands.items()})
+            )
 
             rows.append(row)
 
@@ -99,70 +101,26 @@ def build_nasa_features(
       - Etiket mm cinsinden geliyor, mikrometreye çevrilir (PHM ile aynı birim).
 
     ``drop_cases`` ile bilinen bozuk vakalar dışlanır (vaka 6'da tek koşu var).
+
+    Öznitelik hesabı ve türetilmiş sütunlar ``extract.assemble_feature_table``
+    içinde; bu fonksiyon yalnızca ``mill.mat`` alan adlarını ortak şemaya
+    çevirir. Çıkarım hattı aynı ortak şemayı doldurup aynı fonksiyonu çağırır.
     """
-    metadata = dataset.metadata()
-
-    if drop_unlabelled:
-        metadata = metadata[metadata["has_label"]]
-    if drop_cases:
-        metadata = metadata[~metadata["case"].isin(drop_cases)]
-
-    rows: list[dict[str, float]] = []
-    iterator = tqdm(
-        metadata.itertuples(index=False),
-        total=len(metadata),
-        desc="nasa",
-        disable=not show_progress,
+    runs = nasa_run_table(
+        dataset.metadata(),
+        drop_unlabelled=drop_unlabelled,
+        drop_cases=drop_cases,
     )
 
-    for entry in iterator:
-        frame = stable_region(dataset.signals(int(entry.entry)), keep=keep)
-
-        row: dict[str, float] = {
-            "case": entry.case,
-            "run": entry.run,
-            # --- kesme parametreleri: Model B'nin yeni girdileri ---
-            "material": entry.material,
-            "feed": entry.feed,
-            "doc": entry.DOC,
-            "rpm": rpm,
-            # --- bu koşunun süresi; kümülatifi aşağıda hesaplanır ---
-            "run_time": entry.time,
-            # --- etiket: mm -> um, PHM ile aynı birim ---
-            "vb_um": entry.VB * 1000.0,
-        }
-        row.update(frame_features(frame))
-
-        for channel in frame.columns:
-            bands = order_band_energies(
-                frame[channel].to_numpy(),
-                sampling_rate_hz=sampling_rate_hz,
-                rpm=rpm,
-                max_order=max_order,
-            )
-            row.update({f"{channel}_{name}": value for name, value in bands.items()})
-
-        rows.append(row)
-
-    features = pd.DataFrame(rows).sort_values(["case", "run"]).reset_index(drop=True)
-
-    # Kümülatif kesme süresi - takımın ne kadar süredir kestiği.
-    #
-    # Neden kritik: kesme parametreleri aşınma HIZINI belirler, aşınma
-    # MİKTARINI değil. "Çelikte, 0,5 mm/dev ilerlemeyle" bilgisi tek başına
-    # takımın şu an ne kadar aşındığını söylemez - ne kadar süredir kestiğini
-    # de bilmek gerekir. Hız x süre = aşınma.
-    #
-    # Sahada da bilinen bir bilgidir: yeni takım takıldığında sayaç sıfırlanır.
-    features["cum_time"] = features.groupby("case")["run_time"].cumsum()
-
-    # Koşul kimliği: parametre genellemesi sınavının gruplama anahtarı.
-    features["condition"] = (
-        features["material"].astype(str)
-        + "_ap" + features["doc"].astype(str)
-        + "_f" + features["feed"].astype(str)
+    return assemble_feature_table(
+        runs,
+        lambda entry: dataset.signals(int(entry.entry)),
+        sampling_rate_hz=sampling_rate_hz,
+        rpm=rpm,
+        max_order=max_order,
+        keep=keep,
+        show_progress=show_progress,
     )
-    return features
 
 
 def load_or_build_nasa(

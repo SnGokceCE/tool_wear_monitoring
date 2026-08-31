@@ -16,13 +16,51 @@ Yol haritası: https://claude.ai/code/artifact/395988f2-9463-43ae-b252-62984fe32
 | 04b | Model B-1: NASA + kesme parametreleri | **tamamlandı** |
 | 04c | Model B-2: NASA + ağırlıklı PHM | **tamamlandı** |
 | 04d | worn/unworn sınıflandırma çıktısı | **tamamlandı** |
-| 05 | Derin öğrenme modelleri | — |
-| 06 | Sistemi ayağa kaldır (v1) | — |
+| 05 | Derin öğrenme modelleri | **tamamlandı** |
+| 06 | Sistemi ayağa kaldır (v1) | **tamamlandı** |
 | 07 | Çapraz veri seti genelleme sınavı | — |
 | 08 | Sensör azaltma çalışması | — |
 | 09 | Karar mantığı — alarm eşiği | **tamamlandı** |
 | 10 | Sağlamlaştırma ve paketleme | — |
 | 11 | Rapor ve sunum | — |
+
+## Sonuçların kaynağı (provenance)
+
+Rapordaki her sayı bir çalıştırmadan gelir. Hangi kodla, hangi ayarla ve hangi
+kütüphane sürümleriyle üretildiği bilinmiyorsa o sayı doğrulanamaz — ve üç ay
+sonra yeniden üretilemez.
+
+Bu yüzden `train_model.py`, `run_model_deep.py` ve `threshold_sweep.py` her
+çıktının yanına künye yazar (`tcm.provenance`): git commit'i, çalışma ağacının
+kirli olup olmadığı, config dosyasının sha256'sı, komut satırı, zaman damgası
+ve LightGBM / scikit-learn / NumPy / pandas / SciPy / PyTorch sürümleri.
+
+| README bölümü | Kaynak dosya | Üretme komutu |
+|---|---|---|
+| Naif taban | `reports/naive_baseline.csv` | `python scripts/run_naive_baseline.py` |
+| Faz 02 keşif | `reports/figures/` | `python scripts/explore_phm.py` |
+| Faz 04 · Model A | `reports/model_a_*.csv` | `python scripts/run_model_a.py --save` |
+| Faz 04b · Model B-1 | `reports/model_b1_*.csv` | `python scripts/run_model_b1.py --save` |
+| Faz 04c · Model B-2 | `reports/model_b2_summary.csv` | `python scripts/run_model_b2.py --save` |
+| Faz 04d · sınıflandırma | `reports/classification_summary.csv` | `python scripts/run_classification.py --save` |
+| Faz 05 · derin öğrenme | `reports/model_deep_summary.csv` + `.provenance.json` | `python scripts/run_model_deep.py --seeds 3 --save` |
+| Faz 06 · teslim modeli | `reports/model_b1_package.json`, `reports/model_b1_baselines.csv` | `python scripts/train_model.py` |
+| Faz 06 · eşik taraması | `reports/threshold_sweep.csv` | `python scripts/threshold_sweep.py --save` |
+| Faz 09 · karar kuralı | `reports/decision_rule_summary.csv` | `python scripts/run_decision_rule.py --save` |
+
+Üç uyarı:
+
+- **Faz 04 ve 04b–04d sonuçları künye eklenmeden önce (28 Ağustos 2026)
+  üretildi.** Sayıları geçerli — öznitelik tablosu ve model kodu o günden beri
+  değişmedi, Faz 06'daki refaktör birebir aynı tabloyu ürettiği doğrulanarak
+  yapıldı — ama künyeleri kayıtlı değil. Yeniden çalıştırılırlarsa künye
+  kazanırlar.
+- **Faz 09 sayıları 31 Ağustos 2026'da değişti** (kilitlenme hatası
+  düzeltildi). Eski ve yeni değerlerin karşılaştırması "Yol boyunca yanlış
+  çıkan şeyler" bölümünde.
+- **Faz 05 ve Faz 06 künyeleri "kirli" (dirty) işaretli.** Sayılar, henüz
+  commit edilmemiş bir çalışma ağacıyla üretildi. Faz 06 commit edildikten
+  sonra bu betikler yeniden çalıştırılırsa künyeler temiz commit'e bağlanır.
 
 ## Kabul kriterleri
 
@@ -173,10 +211,26 @@ MAE (µm), üç ayrı sınav:
 | Girdi kümesi | Öznitelik | vaka-dışı | koşul-dışı | **malzeme-dışı** |
 |---|---:|---:|---:|---:|
 | naif taban (koşu no) | 1 | 145,99 | 164,59 | 308,96 |
-| sadece sensör | 144 | 145,38 | 173,26 | **221,34** |
+| sadece sensör | 144 | 140,19 | 166,57 | **216,85** |
 | **parametre + süre** | 5 | **108,38** | **114,19** | 388,16 |
-| sensör + parametre | 148 | 144,04 | 159,52 | 226,15 |
-| sensör + parametre + süre | 149 | 138,61 | 164,82 | 271,91 |
+| sensör + parametre | 148 | 139,42 | 163,99 | 226,66 |
+| sensör + parametre + süre | 149 | 138,47 | 164,27 | 271,49 |
+
+> **UYARI — sayılar açıklanmamış bir kayma içeriyor (31 Ağustos 2026).**
+> Yukarıdaki değerler `reports/model_b1_summary.csv` dosyasından, 31 Ağustos
+> 2026'da `b5ff7e8` üzerine commit edilmemiş Faz 06 değişiklikleriyle yapılan
+> koşudan geliyor. Betik iki kez çalıştırıldı ve CSV'yi birebir yeniden üretti,
+> yani koşu deterministik.
+>
+> Ancak README'de daha önce **başka** sayılar yazıyordu (`145,38 / 173,26 /
+> 221,34` gibi) ve o sayıların hangi koşudan geldiği kayıtlı değil. İki koşu
+> arasındaki fark **0,14 – 6,69 µm** aralığında; en büyüğü `sadece sensör`
+> satırının koşul-dışı hücresinde (173,26 → 166,57). Fark gürültü olamaz —
+> tohum sabit ve koşu deterministik — dolayısıyla arada bir kod ya da veri
+> değişikliği olmuş olmalı. **Sebep henüz teşhis edilmedi**; bkz. `NEXT.md`.
+>
+> Aşağıdaki üç bulgunun yönü bu kaymadan etkilenmiyor, ama metindeki tek tek
+> sayılar eski koşuya ait olabilir.
 
 ### Üç bulgu
 
@@ -327,6 +381,141 @@ malzemede güvenilir değil.
 eşiği) varsayılan değerler kullanılıyor. Kaçırılan aşınma yanlış alarmdan
 pahalı olduğuna göre eşik güvenli tarafa kaydırılmalı — Faz 09'un işi.
 
+## Faz 06 — sistemi ayağa kaldır (31 Ağustos 2026)
+
+`python scripts/train_model.py` → `python scripts/predict.py --from-nasa`
+
+Faz 04b "hangi girdi kümesi daha iyi" sorusunu ölçmüştü. Faz 06 o soruyu
+kapatıp **tek bir teslim edilebilir model** üretiyor: kaydedilmiş ağırlık,
+sabitlenmiş eşik, çıkarım hattı, kapsam kontrolü ve künye.
+
+### Teslim edilen model
+
+| | |
+|---|---|
+| Model | B-1, LightGBM (`make_gbm_small`), tohum 42 |
+| Eğitim | **145 satırın tamamı** — katlama ayrılmıyor |
+| Girdi | `sensor+param+time`, **149 öznitelik** |
+| Aktif eşik | **222 µm** (`case` kalibrasyonu) |
+| Ardışık onay | k = 1 |
+
+**Neden 145 satırın tamamı:** çapraz doğrulama katlamaları performansı
+*ölçmek* içindi. Ölçüm bittikten sonra veriyi eğitim dışında tutmanın faydası
+yok — sadece model zayıflar. Bedeli şu: bu modelin doğruluğu artık ölçülemez.
+Raporlanan sayılar Faz 04b'nin çapraz doğrulama sayılarıdır ve öyle kalmalıdır.
+
+`train_model.py` her çalıştırmada örneklem içi MAE'yi de basıyor: **4,81 µm**.
+Bu bir performans sayısı değil, uyarıdır — aynı modelin çapraz doğrulama MAE'si
+iki mertebe büyük (Faz 04b tablosu, `sensör + parametre + süre` satırı). Otuz
+kat fark, örneklem içi hatanın neden raporlanamayacağının doğrudan kanıtı.
+
+### Neden `sensör + parametre + süre` varsayılan
+
+Faz 04b'de `parametre + süre` **bilinen** koşullarda daha iyiydi (108/114 µm vs
+138/165 µm). Buna rağmen varsayılan değil, çünkü teslim senaryosu bilinen koşul
+değil: sahada malzeme alüminyum, eğitim verisinde alüminyum yok. **Her saha
+tahmini malzeme-dışı sınavına denk geliyor.** Orada tablo tersine dönüyor:
+
+| Girdi kümesi | malzeme-dışı MAE |
+|---|---:|
+| naif taban | 309 µm |
+| parametre + süre | **388 µm** — naif tabanın altında |
+| sensör + parametre + süre | **271 µm** — naif tabanın üstünde |
+
+`parametre + süre` config'den seçilebilir kalıyor
+(`serving.feature_set: "param+time"`) ve bilinen koşullar için en iyi seçenek
+olarak belgelidir.
+
+### Alarm eşiği — iki kalibrasyon, biri aktif
+
+Eşik Faz 09'un aynı koduyla (`tcm.decision.calibrate_threshold`), yalnızca
+eğitim verisinden ve katlama dışı tahminlerle seçilir. Nihai modelin
+tahminlerinden seçilseydi model kendi cevaplarını bildiği için hata sıfıra
+yakın görünür ve eşik yanlış yere otururdu.
+
+| Kalibrasyon | Bölme | Katlama | Eşik | İç maliyet | Durum |
+|---|---|---:|---:|---:|---|
+| `case` | takım bazında | 15 | **222 µm** | 31 | **AKTİF** |
+| `material` | dökme demir ↔ çelik | 2 | 156 µm | 61 | pakette, aktif değil |
+
+`material` kalibrasyonu `min_groups=2` ile zorlanır; varsayılan 3 olsaydı iki
+malzeme yetersiz kalır, bölme `case`'e düşer ve sınav "görülmemiş malzeme"den
+"görülmemiş takım"a dönüşerek kolaylaşırdı. Künyede her iki kalibrasyonun
+`requested_split` / `actual_split` / `fell_back` alanları kayıtlıdır (ikisi de
+`fell_back: false`).
+
+**`material` (156 µm) neden aktif değil:** ölçüldü ve operasyonel olarak
+savunulamaz çıktı — 15/15 takımda alarm ömrün ilk yarısında, 9/15'inde ilk
+geçişte çalıyor. Gerekçe ve tam tablo "Yol boyunca yanlış çıkan şeyler"
+bölümünde.
+
+### Kapsam dışı uyarısı
+
+Model hiçbir durumda susmuyor; her tahminin yanına o tahminin kapsam içinde mi
+olduğu yazılıyor. İki seviye var ve karıştırılmamalı:
+
+- **Kapsam dışı (sert)** — görülmemiş malzeme kodu ya da görülmemiş kesme
+  koşulu. Faz 04b'de ölçülmüş bir başarısızlık var; tahmin basılır ama
+  güvenilmez.
+- **Aralık uyarısı (yumuşak)** — malzeme ve koşul tanıdık ama sayısal bir
+  parametre eğitim aralığının dışında (örneğin takım eğitimdeki en uzun
+  takımdan uzun süredir kesiyor). Ekstrapolasyon; ağaç tabanlı model aralık
+  dışında sabit tahmine takılır.
+
+Eğitim kapsamı: malzeme `[1, 2]`, 8 kesme koşulu, `feed [0,25–0,5]`,
+`doc [0,75–1,5]`, `cum_time [0–929]`.
+
+Alüminyum senaryosunun benzetimi:
+
+```bash
+python scripts/predict.py --from-nasa --simulate-unseen-material
+```
+
+### Model paketi
+
+| Dosya | Git | İçerik |
+|---|---|---|
+| `runs/model_b1/model_b1.joblib` | hayır | model + her şey (yeniden üretilebilir) |
+| `reports/model_b1_package.json` | **evet** | öznitelik listesi, eşikler, kapsam, künye, joblib sha256 |
+| `reports/model_b1_baselines.csv` | **evet** | 149 özniteliğin referans istatistikleri |
+
+İkili dosya depoya girmiyor (yeniden üretilebilir); künye ve taban çizgileri
+metin oldukları için giriyor. Böylece "hangi model, hangi eşikle, hangi kodla"
+sorusu git geçmişinden yanıtlanabiliyor. `model_sha256` künye ile ikilinin
+birbirine ait olduğunu doğruluyor.
+
+**Taban çizgileri bir dönüşüm değil.** Modele giren değerler ham kalıyor.
+Gradyan artırma ağaçları eşik tabanlı çalıştığı için girdiyi ölçeklemek
+bulunan bölünmeleri değiştirmez; buna karşılık çıkarımda uygulanmayı unutmak
+sessiz bir hata kaynağı olurdu. İstatistikler yalnızca kapsam kontrolü ve hata
+ayıklama için saklanıyor.
+
+### Eğitim/çıkarım tutarlılığı
+
+Üretimdeki en sinsi hata sınıfı, özniteliklerin eğitimde bir kodla, çıkarımda
+başka bir kodla hesaplanmasıdır — model çökmez, sessizce yanlış tahmin eder.
+Bu projede risk somuttu: aynı döngü iki yerde kopyalanmıştı.
+
+Çekirdek tek bir modüle alındı (`tcm.features.extract`) ve eğitim de çıkarım da
+onu çağırıyor. Ortaklaştırılanlar: öznitelik hesabı, `cum_time`, `condition`
+kimliği ve ham `mill.mat` alanlarının ortak şemaya çevrilmesi
+(`tcm.datasets.nasa.run_table` — `VB` mm→µm çevrimi dahil).
+
+`predict.py --from-nasa` öznitelikleri önbellekten okumaz, **ham sinyalden
+yeniden üretir** — iki yolun gerçekten aynı olduğu ancak böyle gösterilebilir.
+`tests/test_serving.py::TestTrainingInferenceParity` bunu sınıyor.
+
+Refaktör doğrulaması: 145×154 öznitelik tablosu ham veriden yeniden üretildi ve
+eskisiyle karşılaştırıldı — sütun sırası dahil birebir aynı, en büyük sayısal
+fark 0.
+
+### Örneklem içi uyarısı
+
+`predict.py --from-nasa` nihai modelin eğitim verisiyle çalıştığı için 145/145
+satır örneklem içi. Paket bunu satır bazında işaretliyor (`in_sample`) ve betik
+uyarı basıyor: bu çalıştırma **hattın çalıştığını gösterir, performansını
+ölçmez**.
+
 ## Faz 09 — karar mantığı (28 Ağustos 2026)
 
 `python scripts/run_decision_rule.py`
@@ -344,36 +533,143 @@ hiçbir noktada karışmaz.
 
 ### Sonuç
 
+> Aşağıdaki sayılar **31 Ağustos 2026'da düzeltilen kilitlenme hatasından
+> sonraki** değerlerdir. Eski (hatalı) sayılar için "Yol boyunca yanlış çıkan
+> şeyler" bölümüne bakın.
+
 | Sınav | Kural | Kaçırılan | Yanlış alarm | Seçilen eşik | Maliyet |
 |---|---|---:|---:|---:|---:|
 | vaka-dışı | sabit (300 µm) | 4 | 13 | 300,0 | 33 |
 | vaka-dışı | **ayarlı** | **0** | 21 | **272,2** | **21** |
-| koşul-dışı | sabit (300 µm) | 4 | 23 | 300,0 | 43 |
-| koşul-dışı | **ayarlı** | **0** | 34 | **257,6** | **34** |
-| malzeme-dışı | sabit (300 µm) | 16 | 48 | 300,0 | 128 |
-| malzeme-dışı | **ayarlı** | **11** | 48 | **237,0** | **103** |
+| koşul-dışı | sabit (300 µm) | 5 | 20 | 300,0 | 45 |
+| koşul-dışı | **ayarlı** | **1** | 28 | **257,6** | **33** |
+| malzeme-dışı | sabit (300 µm) | 23 | 39 | 300,0 | 154 |
+| malzeme-dışı | **ayarlı** | **22** | 44 | **237,0** | **154** |
 
-**Toplam maliyet 204 → 158 (−%22,5).** Bilinen koşullarda kaçırılan aşınma
-sayısı **sıfıra** iniyor.
+**Toplam maliyet 232 → 208 (−%10,3).**
 
-Seçilen eşikler her sınavda 300'ün altında (272 / 258 / 237 µm) — model
-sistematik olarak eksik tahmin ettiği için karar kuralı güvenli tarafa kayıyor.
-Bu, fizikten beklenen davranış.
+Üç okuma:
+
+- **Bilinen takımda (vaka-dışı) kaçırılan aşınma sıfıra iniyor**, koşul-dışında
+  bire. Karar kuralının değeri burada.
+- **Görülmemiş malzemede karar kuralı hiçbir şey kazandırmıyor** (154 → 154).
+  Eşiği düşürmek 1 kaçırma kurtarıyor, karşılığında 5 yanlış alarm getiriyor —
+  5:1 oranında tam başabaş. Model o sınavda o kadar bozuk ki eşiği oynatmak
+  fayda üretmiyor. Bu, alüminyum uyarısının bir başka biçimi.
+- Seçilen eşikler her sınavda 300'ün altında (272 / 258 / 237 µm) — model
+  sistematik olarak eksik tahmin ettiği için karar kuralı güvenli tarafa
+  kayıyor. Fizikten beklenen davranış.
 
 **Ardışık onay (histerezis) işe yaramadı:** iç seçim her katlamada k = 1 seçti.
 Tahminler zaten düzgün ilerlediği için (`cum_time` monoton) gürültü bastırmaya
 ihtiyaç yok.
 
-### Yol boyunca bulunan hata
+## Yol boyunca yanlış çıkan şeyler
 
-İlk uygulamada ayarlı eşik **300 → 421 µm** çıkıyordu, yani güvensiz tarafa.
-Sebebi: `apply_consecutive` alarmı kilitliyor (aşınma geri dönmez, alarm da
-sönmemeli) — ama bu kural iç çapraz doğrulamanın *birleştirilmiş* tahmin
-dizisine uygulanınca, ilk takımdaki alarm sonraki bütün takımlara taşıyordu.
-Optimizasyon da bundan kaçınmak için eşiği absürt biçimde yükseltiyordu.
+Bu bölüm bilerek tutuluyor. Düzeltilen hatalar, hiç yapılmamış gibi
+davranılırsa tekrar yapılır — ve buradakilerin ikisi zaten tekrar edildi.
 
-Düzeltme: kilitlenme artık takım bazında uygulanıyor. `test_decision.py`
-içinde bu hataya karşı regresyon testi var.
+### 1. Alarm kilidinin takımlar arasına taşması (iki kez yapıldı)
+
+`apply_consecutive` alarmı **kilitler**: bir kez çaldıktan sonra sönmez.
+Tek bir takımın ömrü içinde bu doğrudur, çünkü aşınma geri dönmez. Ama birden
+çok takımın tahminleri arka arkaya eklenmiş bir dizide uygulanırsa, **ilk
+takımdaki alarm sonraki bütün takımları da alarmda gösterir**.
+
+**Birinci kez — eşik seçiminde (Faz 09).** İç çapraz doğrulamanın birleştirilmiş
+tahmin dizisine uygulanıyordu. Optimizasyon, erken alarmların her şeyi
+zehirlemesinden kaçınmak için eşiği **300 → 421 µm**'ye, yani güvensiz tarafa
+çıkarıyordu. Düzeltildi; `tests/test_decision.py::TestLatchingAcrossToolsRegression`
+regresyon testi yazıldı.
+
+**İkinci kez — dış değerlendirmede (Faz 09, Faz 06'da bulundu).** Aynı hata
+`run_decision_rule.py` içindeki sonuç tablosunda hayatta kaldı: kilit
+katlamanın tamamına uygulanıyordu. Etkisi:
+
+| Sınav | Kaçırılan (hatalı) | Kaçırılan (doğru) | Yanlış alarm (hatalı→doğru) | Maliyet (hatalı→doğru) |
+|---|---:|---:|---|---|
+| vaka-dışı | 0 | 0 | 21 → 21 | 21 → 21 |
+| koşul-dışı | 0 | **1** | 34 → 28 | 34 → 33 |
+| malzeme-dışı | 11 | **22** | 48 → 44 | 103 → **154** |
+| **TOPLAM** | **11** | **23** | 103 → 93 | **158 → 208** |
+
+Görülmemiş malzemede kaçırılan aşınma **iki katına** çıktı. Hatanın yönü
+tehlikeliydi: kilit taştığında satırlar "alarm verildi" sayılıyor, dolayısıyla
+gerçekte kaçırılan aşınmalar sayılmıyordu — **sistem olduğundan güvenli
+görünüyordu**.
+
+Karar kuralının kazancı da −%22,5'ten −%10,3'e indi.
+
+`vaka-dışı` sınavı etkilenmedi, çünkü o protokolde her katlama tek bir
+takımdan oluşuyor; taşacak ikinci takım yok.
+
+**Eşikler değişmedi** (272,2 / 257,6 / 237,0 µm) — onlar iç çapraz doğrulamadan
+geliyor ve orası birinci düzeltmeyle zaten onarılmıştı. Değişen yalnızca
+raporlanan performans.
+
+**Neden birinci düzeltme ikincisini yakalamadı:** yazdığımız regresyon testi
+kütüphane fonksiyonunu (`alarm_flags`) sınıyordu, betiğin *o fonksiyonu
+çağırdığını* değil. Betik yanlış olan `apply_consecutive`'i çağırmaya devam
+etti ve test yeşil kaldı. Ayrıca doğru fonksiyonun adı `_flags_by_group` idi —
+alt çizgi onu "özel" gösteriyor, çağıran kodu genel olana itiyordu.
+
+İki düzeltme yapıldı: fonksiyon `alarm_flags` adıyla açıkça genel hale
+getirildi, ve `tests/test_decision_rule_script.py` betiği **doğrudan çağıran**
+regresyon testleriyle eklendi. O dosyadaki ilk test, sentetik verinin iki
+uygulamayı gerçekten ayırt ettiğini kanıtlıyor — aksi halde test hiçbir şeyi
+korumazdı.
+
+> **Ders:** kütüphaneyi test etmek, kütüphaneyi doğru kullandığınızı test etmez.
+
+### 2. `conservative` eşik seçim kuralı (Faz 06'da kaldırıldı)
+
+Faz 06'da eşik iki kurguyla kalibre edildi (`case` ve `material`) ve
+`conservative` adında bir kural ikisinin **düşüğünü otomatik** seçiyordu.
+Gerekçesi makuldü: kaçırılan aşınma yanlış alarmdan 5 kat pahalı, belirsizlikte
+güvenli taraf düşük eşik.
+
+Sonucu makul değildi. Kural her seferinde yalnızca **2 katlamayla** hesaplanan
+gürültülü `material` kalibrasyonunu (156 µm) seçiyordu. O eşik ölçüldüğünde
+(`scripts/threshold_sweep.py`):
+
+| Eşik | Kaçırılan | Yanlış alarm | Ort. alarm konumu | İlk yarıda | **İlk geçişte** |
+|---:|---:|---:|---:|---:|---:|
+| **156** | 0 | 61 | ömrün %12'si | 14/15 | **9/15** |
+| 190 | 4 | 58 | %15 | 13/15 | 8/15 |
+| 222 | 9 | 53 | %16 | 11/15 | 7/15 |
+| 237 | 9 | 50 | %18 | 11/15 | 6/15 |
+
+156 µm'de **15 takımın 9'unda alarm daha ilk geçişte çalıyor** ve ortalama
+alarm konumu takım ömrünün %12'si. Yani kural pratikte "her takımı takar takmaz
+at" diyor — bunun için modele gerek yok.
+
+**Kök neden maliyet fonksiyonunda:** yanlış alarm **geçiş başına** sayılıyor.
+Ömrünün başında atılan bir takım, tabloda "1 yanlış alarm" olarak görünüyor;
+gerçekte ise bütün bir takım ömrü çöpe gidiyor. Maliyet fonksiyonu erken
+değiştirmenin bedelini ölçmediği için optimizasyon eşiği dibe itiyor.
+
+Karar: `conservative` kaldırıldı, aktif eşik **`case` kalibrasyonu (222 µm)**.
+`material` kalibrasyonu pakette ve künyede duruyor ama varsayılan değil.
+
+> **Ders:** "belirsizlikte güvenli tarafı seç" kuralı, güvenli tarafın bedeli
+> maliyet fonksiyonunda temsil edilmiyorsa otomatikleştirilemez.
+
+**Gelecek çalışma:** maliyet modeline **takım bazında ömür israfı** terimi
+eklenmeli (örneğin "alarm ömrün %p'sinde çaldıysa (1−p) takım maliyeti").
+O terim eklendiğinde `material` kalibrasyonu yeniden değerlendirilmelidir —
+şu anki reddi, kalibrasyonun kendisine değil, onu değerlendiren maliyet
+fonksiyonunun eksikliğine dayanıyor.
+
+### 3. Kabul kriterinin ulaşılamaz olması (Faz 04)
+
+Faz 00'da konan "gecikme ≤ 5 geçiş" hedefi, etiketin kendi ölçüm gürültüsünün
+altında doğruluk istiyordu. Ölçüldü, ulaşılamaz olduğu gösterildi ve
+overshoot (µm) metriğiyle değiştirildi. Ayrıntı yukarıda, Faz 04 bölümünde.
+
+### 4. PHM birleştirmenin reddi (Faz 04c)
+
+Denendi, ölçüldü, üç ağırlıkta da işe yaramadı ve alarm davranışını bozdu.
+Ayrıntı yukarıda, Faz 04c bölümünde. Olumsuz sonuç da sonuçtur.
 
 ## Kurulum
 

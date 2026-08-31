@@ -31,9 +31,10 @@ from tcm import load_config
 from tcm.cli import setup_console
 from tcm.decision import (
     alarm_cost,
-    apply_consecutive,
+    alarm_flags,
     choose_consecutive,
     choose_threshold,
+    oof_predictions,
 )
 from tcm.evaluation.classification import classification_scores
 from tcm.models.gbm import make_gbm_small
@@ -139,7 +140,11 @@ def _run(data, group_column, columns, limit, seed, cost_missed, cost_false,
         thresholds.append(threshold)
         ks.append(k)
         truths.append(test["worn"].to_numpy())
-        flags.append(apply_consecutive(predicted >= threshold, k))
+        # Kilit TAKIM bazında. Katlamanın tamamına uygulamak (eski hali) bir
+        # takımdaki erken alarmı sonraki bütün takımlara taşıyordu ve
+        # kaçırılan aşınmayı üçte bir gösteriyordu. Bkz. README, "yol boyunca
+        # bulunan hatalar".
+        flags.append(alarm_flags(predicted, threshold, k, test["case"].to_numpy()))
 
     truth = np.concatenate(truths)
     flag = np.concatenate(flags)
@@ -160,30 +165,17 @@ def _inner_predictions(train, group_column, columns, seed):
     takım (case) bazında bölünür. Bu, iç tahminleri dış sınavdan biraz
     iyimser yapar - eşik seçimi için kabul edilebilir, ama raporlanmalı.
 
-    Ayrıca takım kimliği de döndürülür: alarm kilitlenmesi her takım içinde
-    ayrı işlemeli, takımlar arasında taşmamalı.
+    Uygulama ``tcm.decision.oof_predictions`` içinde: Faz 06'daki nihai model
+    de aynı fonksiyonu çağırıyor. İkisinin aynı kodu kullanması, "eşik Faz
+    09'daki mantıkla seçildi" ifadesinin denetlenebilir olmasının koşulu.
     """
-    inner_column = group_column if train[group_column].nunique() >= 3 else "case"
-    truths, preds, groups = [], [], []
-
-    for held_out in sorted(train[inner_column].unique()):
-        inner_train = train[train[inner_column] != held_out]
-        inner_test = train[train[inner_column] == held_out].sort_values("run")
-        if inner_train.empty or inner_test.empty:
-            continue
-
-        model = make_gbm_small(random_state=seed)
-        model.fit(inner_train[columns], inner_train["vb_um"])
-        truths.append(inner_test["vb_um"].to_numpy())
-        preds.append(np.asarray(model.predict(inner_test[columns]), dtype=float))
-        groups.append(inner_test["case"].to_numpy())
-
-    if not truths:
-        raise RuntimeError(
-            f"'{inner_column}' ile iç çapraz doğrulama kurulamadı - "
-            "eğitim kümesinde yeterli grup yok."
-        )
-    return np.concatenate(truths), np.concatenate(preds), np.concatenate(groups)
+    oof = oof_predictions(
+        train, group_column, columns,
+        lambda: make_gbm_small(random_state=seed),
+        target_column="vb_um", sort_column="run",
+        latch_column="case", fallback_column="case", min_groups=3,
+    )
+    return oof.y_true, oof.y_pred, oof.groups
 
 
 def _verdict(combined, cost_missed, cost_false) -> None:

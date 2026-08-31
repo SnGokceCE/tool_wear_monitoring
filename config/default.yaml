@@ -175,4 +175,60 @@ decision:
   # Ardışık onay adayları: alarm için üst üste kaç geçiş eşiği aşmalı.
   consecutive_candidates: [1, 2, 3]
 
+# ---------------------------------------------------------------- Teslim (Faz 06)
+#
+# Nihai model B-1'dir ve 145 satırın TAMAMIYLA eğitilir - katlama ayrılmaz.
+# Katlamalar performansı ÖLÇMEK içindi (Faz 04b); ölçüm bittikten sonra veriyi
+# eğitim dışında tutmanın bir faydası kalmaz, sadece model zayıflar.
+serving:
+  # ---- girdi kümesi ----
+  # "sensor+param+time" (149 öznitelik) | "param+time" (5 öznitelik)
+  #
+  # Varsayılan sensörlü olan. Faz 04b'de "param+time" BİLİNEN koşullarda daha
+  # iyiydi (108/114 vs 138/164 um), ama teslim senaryosu bilinen koşul değil:
+  # sahada malzeme aluminyum, egitim verisinde aluminyum yok. Yani her saha
+  # tahmini "malzeme-disi" sinavina denk gelir ve orada tablo tersine doner:
+  #
+  #   param+time           388 um  <- naif tabanin (309) ALTINDA
+  #   sensor+param+time    271 um  <- naif tabanin ustunde
+  feature_set: "sensor+param+time"
+
+  # ---- alarm esigi ----
+  # Esik iki ayri kurguyla kalibre edilir ve IKISI DE pakete yazilir:
+  #
+  #   case     : takim bazinda ic capraz dogrulama (leave-one-tool-out),
+  #              15 katlama. AKTIF olan budur.
+  #   material : malzeme bazinda ic capraz dogrulama (dokme demirde egit,
+  #              celikte olc), 2 katlama. min_groups=2 ile zorlanir.
+  #              Pakette ve kunyede durur ama VARSAYILAN DEGIL.
+  #
+  # NEDEN case AKTIF (2026-08-31'de olculdu):
+  #
+  # material kalibrasyonu 156 um veriyor - siniri n neredeyse yarisi. Bu
+  # deger olculdugunde operasyonel olarak savunulamaz cikti:
+  #
+  #   15/15 takimda alarm omrun ilk yarisinda caliyor
+  #    9/15 takimda alarm DAHA ILK GECISTE caliyor
+  #   ortalama alarm konumu: takim omrunun %12'si
+  #
+  # Yani "her takimi takar takmaz at" kuralina denk; bunun icin modele gerek
+  # yok. Iki sebebi var: (a) yalnizca 2 katlamayla hesaplaniyor, gurultulu;
+  # (b) maliyet fonksiyonu yanlis alarmi GECIS basina sayiyor ve takim
+  # bazinda erken degistirmenin bedelini hic olcmuyor, bu yuzden esigi dibe
+  # itiyor.
+  #
+  # GELECEK CALISMA: maliyet modeline takim bazinda omur israfi terimi
+  # eklendiginde material kalibrasyonu yeniden degerlendirilmeli.
+  calibration: "case"   # "case" | "material"
+
+  # Kalibrasyonda ardisik onay (k) da aranir. Faz 09 her katlamada k=1 secti;
+  # mekanizma yine de korunuyor.
+  tune_consecutive: true
+
+  # Paketin yazilacagi yerler. Ikili dosya git disinda (yeniden uretilebilir),
+  # kunye ve taban cizgileri git icinde (metin, denetlenebilir).
+  package_dir: runs/model_b1
+  manifest: reports/model_b1_package.json
+  baselines: reports/model_b1_baselines.csv
+
 random_seed: 42
