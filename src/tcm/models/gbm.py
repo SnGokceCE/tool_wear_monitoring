@@ -16,9 +16,6 @@ from __future__ import annotations
 import numpy as np
 from lightgbm import LGBMRegressor
 
-# Muhafazakâr varsayılanlar. Bu değerler test katlamalarına BAKILARAK
-# seçilmedi - seçilseydi sızıntı olurdu (bkz. aşağıdaki not).
-#
 # Mantık: az sayıda bağımsız yörünge var, o yüzden modelin kapasitesi kısıtlı
 # tutuluyor. Küçük yapraklar (num_leaves), yaprak başına yüksek asgari örnek
 # (min_child_samples) ve düşük öğrenme hızı (learning_rate) ezberlemeyi

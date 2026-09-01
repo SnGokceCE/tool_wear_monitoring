@@ -1,0 +1,3 @@
+bolme,n_egitim,n_dogrulama,n_test,agac,esik_um,test_mae_um,test_rmse_um,test_abs_overshoot_um,worn_recall,missed_worn,false_alarms,balanced_acc,maliyet,git_hash,feature_set
+takım bazlı,100,20,25,10,402.0,164.33013972413914,192.2422838661685,265.0,0.5454545454545454,5.0,0.0,0.7727272727272727,25.0,68d16c1a40f13602e74db853c8f244b598002a97,sensor+param+time
+rastgele,100,20,25,133,207.0,114.94347966020541,166.3212398952618,237.85714285714286,1.0,0.0,7.0,0.7307692307692308,7.0,68d16c1a40f13602e74db853c8f244b598002a97,sensor+param+time
