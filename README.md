@@ -480,7 +480,7 @@ MAE (µm), CNN+GRU üç tohumun ortalaması ± saçılım:
 | Sınav | CNN + GRU | Gradyan artırma | Fark | Saçılım | Hüküm |
 |---|---:|---:|---:|---:|---|
 | vaka-dışı | **123,53** | 144,06 | 20,53 | ±2,12 | **GEÇTİ** |
-| koşul-dışı | **137,44** | 159,74 | 22,30 | ±10,17 | **GEÇTİ** |
+| koşul-dışı | **137,79** | 159,74 | 21,95 | ±10,10 | **GEÇTİ** |
 | malzeme-dışı | 252,26 | 257,65 | 5,38 | ±18,29 | **KARARSIZ** |
 
 **CNN+GRU üç sınavın ikisinde gradyan artırmayı kesin olarak geçti.**

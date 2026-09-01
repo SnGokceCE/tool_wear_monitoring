@@ -1,10 +1,10 @@
 {
-  "git_hash": "74d4de86340b0a9d14b5226a75acfa9203d86f4e",
-  "git_dirty": false,
+  "git_hash": "aa633cc6af24435c258846b77ea22b55d8a8e649",
+  "git_dirty": true,
   "config_path": "config/default.yaml",
   "config_digest": "97253f2942955bcac9d845b5d12cbb1203398690d1674f59443a9a3580e24988",
-  "command": "scripts/run_model_deep.py --protocols vaka-dışı --seeds 3 --epochs 120 --save",
-  "timestamp": "2026-08-31T13:24:56+00:00",
+  "command": "scripts/run_model_deep.py --protocols koşul-dışı,malzeme-dışı --seeds 3 --epochs 120 --save",
+  "timestamp": "2026-09-01T06:24:25+00:00",
   "python": "3.13.5",
   "versions": {
     "lightgbm": "4.7.0",

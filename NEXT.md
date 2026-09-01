@@ -1,88 +1,85 @@
 # Sıradaki iş
 
-Durum: 31 Ağustos 2026. **Faz 06 ve doğrulama denetimi kapandı.**
-Sıradaki iş **rapor (Faz 11)**.
+Durum: 1 Eylül 2026. **Faz 06, doğrulama denetimi ve rapor sayı denetimi kapandı.**
 
-README'de artık `(doğrulanmamış)` etiketli sayı yok; her tablo bir rapor
-dosyasına ve bir git hash'ine bağlı.
+Rapor (`staj_raporu.md`) ve `README.md`, kayıtlı sonuç dosyalarıyla makineyle
+doğrulanmış durumda. Kayıtsız sayı kalmadı.
+
+```bash
+python scripts/check_report_numbers.py   # README  - 160 sayı
+python scripts/check_staj_raporu.py      # rapor   - 130 sayı
+```
 
 ---
 
-## AÇIK — Kod temizliği (rapordan sonra da yapılabilir)
+## AÇIK — Kod temizliği
 
-Hiçbiri sonucu etkilemiyor; sadece bakım borcu.
+Hiçbiri sonucu etkilemiyor.
 
-- `src/tcm/decision.py` — `_flags_by_group = alarm_flags` geriye dönük takma
-  adı artık hiçbir yerden çağrılmıyor, kaldırılabilir.
+- `src/tcm/decision.py` — `_flags_by_group = alarm_flags` takma adı artık
+  kullanılmıyor.
 - `src/tcm/datasets/nasa.py` — `ensure_not_used_for_training()` anlamsız
-  kaldı: NASA artık eğitimde kullanılıyor (`use_for_training: true`) ve
-  fonksiyon hiçbir yerden çağrılmıyor.
-- Faz 04/04b/04c/04d betikleri `META_COLUMNS` / `PARAMETER_COLUMNS` /
-  `TIME_COLUMN` sabitlerini ayrı ayrı tanımlıyor. `tcm.serving` içindeki
-  `resolve_feature_columns` bunları zaten sağlıyor. **Dikkat:** Model A'nın
-  `META_COLUMNS`'ı bilinçli olarak `run_time`/`cum_time` içeriyor (aşağıdaki
-  hataya bakın); birleştirme yapılırsa bu ayrım korunmalı.
+  kaldı; NASA eğitimde kullanılıyor ve fonksiyon çağrılmıyor.
+- Betikler `META_COLUMNS` / `PARAMETER_COLUMNS` / `TIME_COLUMN` sabitlerini
+  ayrı ayrı tanımlıyor. **Dikkat:** Model A ve `explore_phm.py` bilinçli
+  olarak `run_time`/`cum_time` dışlıyor (aşağıdaki kusura bakın); birleştirme
+  yapılırsa bu ayrım korunmalı.
+- `check_report_numbers.py` ile `check_staj_raporu.py` ayrı belgeler için
+  ayrı tutuldu; ortak bir etiket profili mekanizmasıyla birleştirilebilirler.
 
-## AÇIK — Faz 07, 08, 10 hiç yapılmadı
+## AÇIK — Faz 07, 08, 10
 
-Yol haritasında var, teslim için zorunlu değil:
+Yol haritasında var, teslim için zorunlu değil. Gerekçeleri README'de.
 
-- **Faz 07** çapraz veri seti genelleme sınavı — Faz 04c'de PHM birleştirme
-  reddedildiği için kısmen cevaplanmış sayılabilir.
-- **Faz 08** sensör azaltma çalışması — Faz 04'teki kanal alt kümesi tablosu
-  bunun ön çalışması.
-- **Faz 10** sağlamlaştırma ve paketleme — Faz 06 paketi bunun çoğunu
-  karşılıyor.
+## AÇIK — Derin öğrenme yeniden üretilebilirliği
+
+Aynı komut ikinci kez çalıştırıldığında koşul-dışı ortalaması 137,44'ten
+137,79 µm'ye kaydı (malzeme-dışı birebir aynı kaldı). Sebep CPU'da çok iş
+parçacıklı kayan nokta toplama sırasının belirlenimci olmaması; kayma tohum
+saçılımının çok altında ve hükümleri değiştirmiyor. Tam belirlenimcilik
+isteniyorsa `torch.use_deterministic_algorithms(True)` ve tek iş parçacığı
+denenebilir — maliyeti yavaşlamadır.
 
 ---
 
-## Bu oturumda TAMAMLANANLAR
+## Bu oturumlarda TAMAMLANANLAR
 
-### Künye denetimi — iki tabloda kayma bulundu, ikisi de düzeltildi
+### Rapor sayı denetimi
 
-Faz 04–04d betikleri yeniden çalıştırılıp kayıtlı tablolarla karşılaştırıldı.
+Raporun tamamı CSV'lerle karşılaştırıldı; **13 hücre bayat çıktı ve
+düzeltildi**: Faz 09 tablosunun üç satırı (latching düzeltmesi öncesi),
+Model B-1'in bir hücresi (shape guard öncesi), derin öğrenme koşul-dışı
+satırı ve maliyet tablosu. Ayrıca §7'deki latching tablosu §5.5 ile aynı
+kurguya çevrildi ve "kaçırılan aşınma sıfıra iniyor" cümlesi düzeltildi
+(vaka-dışında sıfır, koşul-dışında bir).
 
-**Faz 04 · Model A — GERÇEK HATA.** `run_model_a.py` özniteliklerini "meta
-olmayan her sütun" diye seçiyordu. Faz 04c'de PHM tablosuna `run_time` ve
-`cum_time` eklenince Model A onları sessizce yuttu (168 → 170 öznitelik).
-`cum_time` geçiş sayısının monoton fonksiyonu, yani naif tabanın girdisi —
-Model A'nın "sensörler eğilimin ötesine ne katıyor" sorusu geçersizleşiyordu.
-Hata MAE'yi **iyileştirdiği** için fark edilmesi zordu (19,91 → 19,18).
-İki sütun `META_COLUMNS`'a eklendi; tablo README değerlerine birebir döndü.
+### Kayıtsız sayı bırakılmadı
 
-**Faz 04b · Model B-1 — kayma.** README dokuz hücrede `skew`/`kurtosis`
-koruması öncesi değerleri taşıyordu (`smcDC` kanalı, 23/145 satır). Sebep
-teşhis edildi, tablo CSV'ye eşitlendi.
+- Faz 02 korelasyon özeti → `reports/correlation_summary.csv`
+  (`explore_phm.py --save`)
+- Eşik taramasında takım ömrü israfı sütunları → `threshold_sweep.csv`
+- Derin öğrenmede tohum başına MAE'ler → `model_deep_summary.csv`
+- Yeniden üretilemeyen tek sayı (malzeme tahmini %79,5) rapordan çıkarıldı;
+  yerine protokolü tanımlı %71,7 kondu.
 
-**Faz 04c ve 04d — temiz.** Sayılar değişmedi.
+### Aynı kusurun üç örneği bulundu ve düzeltildi
 
-Dört betiğin dördüne de künye eklendi (`tcm.provenance`); kaydedilen tablolar
-artık `git_hash` sütunu taşıyor.
+"Meta olmayan her sütun özniteliktir" kuralı, tabloya sonradan eklenen
+`run_time`/`cum_time` sütunlarını üç yerde sessizce yuttu:
 
-### Üç doğrulanamayan sayı — ikisi üretildi, biri reddedildi
-
-| İddia | Sonuç |
+| Yer | Etki |
 |---|---|
-| Parametreler tek başına MAE 205 µm | **Üretildi:** 206,20 (vaka-dışı) / 202,86 (koşul-dışı). Ana tabloya `5 · sadece parametre (süresiz)` satırı olarak eklendi. |
-| VB ≤ 600 → MAE 140,45 → 78,46 | **Üretildi:** 126/145 koşu, 140,19 → 78,44. Üç sınav için de betiğe alındı. |
-| Sensörden malzeme tahmini %79,5 | **ÜRETİLEMEDİ.** Takım bazında 0,890, koşul bazında 0,717 — hiçbiri 0,795 değil. Protokolü kayıtlı olmadığı için hangi kurgudan geldiği bilinmiyor. Sayı README'den çıkarıldı. |
+| Model A (`run_model_a.py`) | 168 → 170 öznitelik, MAE 19,91 → 19,18 |
+| Keşif (`explore_phm.py`) | ham korelasyon 0,994 → 0,999, 140/168 → 142/170 |
+| (Faz 04b'deki kayma farklı kökenli: `skew`/`kurtosis` koruması) |  |
 
-Malzeme tahmini analizi doğru protokolle yeniden yazıldı ve **bulgunun yönü
-değişti**: koşul bazında (dürüst sınav) doğruluk 0,717, çoğunluk tabanının
-yalnızca 4 puan üstünde. Takım bazındaki 0,890 iyimser, çünkü `condition`
-kimliği malzemeyi zaten içeriyor ve kardeş takımlar eğitimde kalıyor.
-
-Bu, alüminyum uyarısını **güçlendiriyor**: sistem hiç görmediği bir malzemeyi
-sinyalden tanıyıp kendini uyaramaz. Yeni çıktı: `reports/model_b1_extras.csv`.
+Üçünde de **rapor doğruydu, kod ayrışmıştı**. Künye altyapısı ve iki denetim
+betiği bu boşluğu kapattı.
 
 ### Daha önce kapatılanlar
 
-- Latching hatası (dış değerlendirme) düzeltildi + regresyon testi
-  (`tests/test_decision_rule_script.py`), Faz 09 tablosu yeniden hesaplandı.
-- `conservative` eşik kuralı kaldırıldı; aktif eşik `case` kalibrasyonu
-  (222 µm). Gelecek çalışma: maliyet fonksiyonuna takım bazında ömür israfı
-  terimi.
-- Faz 05 üç sınavda da üç tohumla ölçüldü, README bölümü yazıldı.
-- Faz 06 teslim paketi, çıkarım hattı, kapsam uyarısı, künye.
+Latching hatası (iç + dış) + regresyon testleri, `conservative` eşik kuralının
+kaldırılması (aktif eşik `case`, 222 µm), Faz 05'in üç sınavda üç tohumla
+ölçülmesi, Faz 06 teslim paketi ve çıkarım hattı.
 
 164 test geçiyor.
