@@ -25,6 +25,7 @@ from tcm.cli import setup_console
 from tcm.datasets import PHM2010
 from tcm.features import spindle_frequency_hz, tooth_passing_frequency_hz, welch_spectrum
 from tcm.features.build import load_or_build
+from tcm.provenance import format_stamp, run_stamp
 
 CUTTER_COLOURS = {"c1": "#0D6E70", "c4": "#9E5410", "c6": "#8E2B26"}
 
@@ -34,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=None)
     parser.add_argument("--rebuild", action="store_true", help="öznitelikleri yeniden üret")
+    parser.add_argument("--save", action="store_true",
+                        help="korelasyon tablolarını reports/ altına yaz")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -70,8 +73,32 @@ def main(argv: list[str] | None = None) -> int:
     _report_wear_shape(wear, limit)
 
     _plot_feature_vs_wear(features, figures)
-    _report_correlations(features)
-    _report_detrended_correlations(features)
+    raw_table = _report_correlations(features)
+    detrended_table = _report_detrended_correlations(features)
+
+    # Faz 02'nin ana metodolojik iddiası buradan çıkıyor: eğilim çıkarılmış
+    # korelasyonun tavanı, sensörlerin naif tabana katabileceği bilginin üst
+    # sınırıdır. Rapor bu sayıyı kullanıyor, dolayısıyla kayıtlı olmalı.
+    summary = _correlation_summary(raw_table, detrended_table)
+    print("\n--- ÖZET (rapora giren sayılar) ---")
+    print(summary.to_string(index=False))
+
+    stamp = run_stamp(args.config) if args.config else run_stamp()
+    print("\n" + "-" * 78)
+    print("ÇALIŞTIRMA KÜNYESİ")
+    print("-" * 78)
+    print(format_stamp(stamp))
+
+    if args.save:
+        target = config.path("paths.reports")
+        target.mkdir(parents=True, exist_ok=True)
+        summary.assign(git_hash=stamp["git_hash"]).to_csv(
+            target / "correlation_summary.csv", index=False)
+        raw_table.assign(git_hash=stamp["git_hash"]).to_csv(
+            target / "correlation_raw.csv", index=False)
+        detrended_table.assign(git_hash=stamp["git_hash"]).to_csv(
+            target / "correlation_detrended.csv", index=False)
+        print(f"\nKaydedildi: {target / 'correlation_summary.csv'}")
 
     _plot_spectra(dataset, wear, fs, rpm, flutes, figures)
 
@@ -178,7 +205,13 @@ def _report_correlations(features, top_n=12):
     """
     print("\n--- Öznitelik / aşınma ilişkisi (Spearman) ---")
 
-    exclude = {"cutter", "cut", "vb_um", "flute_spread_um"}
+    # `run_time` / `cum_time` öznitelik DEĞİL - tabloya Model B-2 için
+    # sonradan eklendiler. `cum_time` geçiş sayısının monoton fonksiyonu,
+    # yani bu analizin tam olarak AYIRMAYA çalıştığı eğilimin kendisi.
+    # Dışlanmazsa ham korelasyon tablosunu şişirir (0,994 -> 0,999,
+    # 140/168 -> 142/170). Aynı kusur Model A betiğinde de bulunmuştu.
+    exclude = {"cutter", "cut", "vb_um", "flute_spread_um",
+               "run_time", "cum_time"}
     columns = [c for c in features.columns if c not in exclude]
     cutters = sorted(features["cutter"].unique())
 
@@ -237,7 +270,13 @@ def _report_detrended_correlations(features, top_n=12):
 
     print("\n--- Geçiş sayısı etkisi çıkarıldıktan sonra (kısmi ilişki) ---")
 
-    exclude = {"cutter", "cut", "vb_um", "flute_spread_um"}
+    # `run_time` / `cum_time` öznitelik DEĞİL - tabloya Model B-2 için
+    # sonradan eklendiler. `cum_time` geçiş sayısının monoton fonksiyonu,
+    # yani bu analizin tam olarak AYIRMAYA çalıştığı eğilimin kendisi.
+    # Dışlanmazsa ham korelasyon tablosunu şişirir (0,994 -> 0,999,
+    # 140/168 -> 142/170). Aynı kusur Model A betiğinde de bulunmuştu.
+    exclude = {"cutter", "cut", "vb_um", "flute_spread_um",
+               "run_time", "cum_time"}
     columns = [c for c in features.columns if c not in exclude]
     cutters = sorted(features["cutter"].unique())
 
@@ -296,6 +335,33 @@ def _report_detrended_correlations(features, top_n=12):
         "modelin naif tabana KATABİLECEĞİ bilginin üst sınırını gösterirler."
     )
     return table
+
+
+
+def _correlation_summary(raw_table, detrended_table):
+    """Rapordaki 2x2 tabloyu üretir - dört sayının tamamı buradan gelir.
+
+    Elle okunup rapora yazılmak yerine hesaplanıp kaydedilmesinin sebebi:
+    "0,30 tavanı" bu çalışmanın en güçlü metodolojik iddiası ve kayıtsız bir
+    iddia doğrulanamaz.
+    """
+    def describe(table):
+        consistent = table[table["ayni_yon"]]
+        return {
+            "en_guclu": float(table["ort_mutlak"].max()),
+            "tutarli": int(len(consistent)),
+            "toplam": int(len(table)),
+        }
+
+    raw, detrended = describe(raw_table), describe(detrended_table)
+    return pd.DataFrame([
+        {"olcum": "en güçlü öznitelik (ort. |rho|)",
+         "ham": raw["en_guclu"], "egilim_cikarilmis": detrended["en_guclu"]},
+        {"olcum": "tutarlı yönlü öznitelik sayısı",
+         "ham": raw["tutarli"], "egilim_cikarilmis": detrended["tutarli"]},
+        {"olcum": "toplam öznitelik",
+         "ham": raw["toplam"], "egilim_cikarilmis": detrended["toplam"]},
+    ])
 
 
 # ------------------------------------------------------------------ spektrum

@@ -152,6 +152,13 @@ def main(argv: list[str] | None = None) -> int:
         summary.loc[summary["model"] == CANDIDATE_MODEL, "mae_std"] = spread
         summary["tohum_sayisi"] = len(seeds)
         summary["tohumlar"] = ";".join(str(s) for s in seeds)
+        # Tohum başına MAE'ler. Ortalama ve saçılım tek başına yeterli değil:
+        # rapor "tohum başına şu değerler çıktı" derken o sayıların da kayıtlı
+        # olması gerekir, yoksa doğrulanamaz bir iddia olur.
+        summary["tohum_maeleri"] = ""
+        summary.loc[summary["model"] == CANDIDATE_MODEL, "tohum_maeleri"] = (
+            ";".join(f"{run['mae_um']:.4f}" for run in runs)
+        )
         all_rows.append(summary)
 
     combined = pd.concat(all_rows, ignore_index=True)

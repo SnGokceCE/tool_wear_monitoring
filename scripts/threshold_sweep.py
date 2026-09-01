@@ -203,6 +203,11 @@ def _evaluate(
     missed = int(events["missed"].sum())
     false_alarms = int(events["false_alarms"].sum())
 
+    # Takım ömrü israfı. Maliyet fonksiyonu yanlış alarmı GEÇİŞ başına sayıyor;
+    # ömrünün başında atılan bir takım orada "1 yanlış alarm" görünüyor. Gerçek
+    # bedel takım başına, o yüzden ayrıca ölçülüyor.
+    position = events["alarm_idx"] / events["n_runs"]
+
     return {
         "esik_um": threshold,
         "missed_worn": missed,
@@ -219,6 +224,10 @@ def _evaluate(
         "tam_zamanli": int((delays == 0).sum()),
         "overshoot_ort_um": float(events["overshoot_um"].mean()),
         "en_kotu_overshoot_um": float(events["overshoot_um"].max()),
+        # --- takım ömrü israfı ---
+        "omur_orani_ort": float(position.mean()),
+        "ilk_yarida_takim": int((position < 0.5).sum()),
+        "ilk_geciste_takim": int((events["alarm_idx"] == 0).sum()),
     }
 
 
