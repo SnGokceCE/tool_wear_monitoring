@@ -60,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
                         choices=["sensor+param+time", "param+time"])
     parser.add_argument("--split", default="both",
                         choices=["tool", "random", "both"])
+    parser.add_argument("--detail", action="store_true",
+                        help="test kümesinin satır satır tahminlerini ve "
+                             "karışıklık matrisini bas")
     parser.add_argument("--save", action="store_true")
     args = parser.parse_args(argv)
 
@@ -85,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = []
     for mode in modes:
         rows.append(_run_split(data, columns, mode, limit, seed,
-                               cost_missed, cost_false))
+                               cost_missed, cost_false, detail=args.detail))
 
     table = pd.DataFrame(rows)
     _print_comparison(table, modes)
@@ -161,7 +164,8 @@ def _describe(parts: dict[str, pd.DataFrame], mode: str) -> None:
 
 # ------------------------------------------------------------- çalıştırma
 
-def _run_split(data, columns, mode, limit, seed, cost_missed, cost_false) -> dict:
+def _run_split(data, columns, mode, limit, seed, cost_missed, cost_false,
+               detail: bool = False) -> dict:
     parts = _split_by_tool(data) if mode == "tool" else _split_random(data, seed)
     _describe(parts, mode)
 
@@ -222,6 +226,9 @@ def _run_split(data, columns, mode, limit, seed, cost_missed, cost_false) -> dic
           f"(kaçırılan {int(scores['missed_worn'])}/{int(worn.sum())})")
     print(f"  Yanlış alarm    : {int(scores['false_alarms'])}")
     print(f"  Dengeli doğruluk: {scores['balanced_acc']:.3f}")
+
+    if detail:
+        _print_detail(test, truth, test_pred, flags, worn, threshold, scores)
 
     return {
         "bolme": "takım bazlı" if mode == "tool" else "rastgele",
@@ -288,6 +295,74 @@ def _tree_sweep(data, columns, limit, seed) -> pd.DataFrame:
             "  ölçeğinde sabit bölme, çapraz doğrulamanın yerini tutmuyor."
         )
     return sweep
+
+
+def _print_detail(test, truth, pred, flags, worn, threshold, scores) -> None:
+    """Test kümesinin satır satır dökümü ve karışıklık matrisi.
+
+    Tek bir MAE sayısı modelin nerede yanıldığını göstermez; bu tablo
+    gösterir. Sütunlar:
+
+      gerçek/tahmin VB : mikrometre
+      hata             : tahmin - gerçek (pozitif = fazla tahmin)
+      aşınmış?         : gerçek VB >= 300 (ISO sınırı)
+      alarm?           : tahmin >= kalibre eşik, takım içinde kilitli
+      durum            : dördünün kesişimi
+    """
+    print("\n  " + "-" * 74)
+    print("  TEST KÜMESİ - satır satır")
+    print("  " + "-" * 74)
+
+    def label(is_worn: bool, has_alarm: bool) -> str:
+        if is_worn and has_alarm:
+            return "TP  doğru yakalandı"
+        if is_worn and not has_alarm:
+            return "FN  KAÇIRILDI"
+        if not is_worn and has_alarm:
+            return "FP  yanlış alarm"
+        return "TN  doğru"
+
+    frame = pd.DataFrame({
+        "takım": test["case"].astype(int).to_numpy(),
+        "koşu": test["run"].astype(int).to_numpy(),
+        "süre": test["cum_time"].to_numpy(),
+        "gerçek": truth,
+        "tahmin": pred,
+        "hata": pred - truth,
+        "aşınmış": np.where(worn, "evet", "hayır"),
+        "alarm": np.where(flags, "VAR", "-"),
+        "durum": [label(bool(w), bool(f)) for w, f in zip(worn, flags)],
+    })
+    print(frame.to_string(index=False, float_format=lambda v: f"{v:8.1f}"))
+
+    tp = int(np.sum(worn & flags))
+    fn = int(np.sum(worn & ~flags))
+    fp = int(np.sum(~worn & flags))
+    tn = int(np.sum(~worn & ~flags))
+
+    print("\n  " + "-" * 74)
+    print(f"  KARIŞIKLIK MATRİSİ  (aşınma sınırı 300 µm, alarm eşiği {threshold:.0f} µm)")
+    print("  " + "-" * 74)
+    print("                    | alarm VAR | alarm YOK |")
+    print(f"    gerçekte aşınmış |    TP {tp:3d} |    FN {fn:3d} |")
+    print(f"    gerçekte sağlam  |    FP {fp:3d} |    TN {tn:3d} |")
+
+    precision = scores["worn_precision"]
+    recall = scores["worn_recall"]
+    f1 = (2 * precision * recall / (precision + recall)
+          if precision + recall > 0 else float("nan"))
+
+    print(f"""
+  Precision (kesinlik)   : {precision:.3f}   "alarm" dediklerimizin kaçı gerçekten aşınmış
+  Recall   (duyarlılık)  : {recall:.3f}   aşınmışların kaçını yakaladık   <- ASIL METRİK
+  F1                     : {f1:.3f}   ikisinin harmonik ortalaması
+  Specificity (seçicilik): {scores['unworn_recall']:.3f}   sağlamların kaçına doğru "sağlam" dedik
+  Accuracy (doğruluk)    : {scores['accuracy']:.3f}   TEK BAŞINA YANILTICI
+  Balanced accuracy      : {scores['balanced_acc']:.3f}   recall ve specificity ortalaması""")
+
+    print("\n  Not: üretimde precision ile recall eşit önemde değildir. Kaçırılan")
+    print("  aşınma (FN) parçayı hurdaya çıkarır; yanlış alarm (FP) yalnızca takım")
+    print("  ömrü israf eder. Bu yüzden asıl bakılan recall'dır.")
 
 
 def _print_comparison(table: pd.DataFrame, modes: list[str]) -> None:
