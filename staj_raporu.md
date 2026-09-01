@@ -13,7 +13,7 @@ Bu çalışmada, CNC frezeleme işlemlerinde takım aşınmasını sensör veris
 
 Çalışmanın ana katkısı en yüksek doğruluk değeri değil, **ölçümün kendisinin güvenilirliğidir**. Alanda yaygın olan iyimser değerlendirme kurgularından kaçınmak için takım bazında bölme, eğilim çıkarılmış korelasyon analizi ve iç çapraz doğrulamayla eşik seçimi baştan kurulmuştur. Geliştirme boyunca sonuçları olduğundan iyi gösteren sekiz ayrı kusur tespit edilip düzeltilmiş, hepsi raporlanmıştır.
 
-En önemli bulgu olumsuz bir bulgudur: sistem, eğitimde görülmüş malzemelerde naif taban çizgisini anlamlı biçimde geçerken, **hiç görülmemiş bir malzemede hiçbir model naif tabanı geçememektedir**. Ayrıca sistem, karşılaştığı malzemenin eğitim kapsamı dışında olduğunu sinyalden tespit edememektedir (%71,7, çoğunluk tabanı %67,6). Bu iki sonuç birlikte, sistemin alüminyum işlenen bir üretim ortamına doğrudan taşınamayacağını göstermektedir ve teslim edilen sisteme açık bir kapsam-dışı uyarı mekanizması olarak yansıtılmıştır.
+En önemli bulgu olumsuz bir bulgudur ve hiç görülmemiş bir malzemeye ilişkindir: **sınıflandırma katmanında hiçbir model naif taban çizgisini geçememekte, karar kuralının ayarlanması da kazanç sağlamamaktadır; regresyon katmanında sensör içeren modeller naif tabanı geçmekte ancak hata bilinen koşullara göre yaklaşık iki katına çıkmaktadır.** Ayrıca sistem, karşılaştığı malzemenin eğitim kapsamı dışında olduğunu sinyalden tespit edememektedir (%71,7, çoğunluk tabanı %67,6). Bu iki sonuç birlikte, sistemin alüminyum işlenen bir üretim ortamına doğrudan taşınamayacağını göstermektedir ve teslim edilen sisteme açık bir kapsam-dışı uyarı mekanizması olarak yansıtılmıştır.
 
 ---
 
@@ -239,7 +239,7 @@ Dengeli doğruluk:
 
 **Regresyon + eşik, doğrudan sınıflandırıcıdan üstündür.** Muhtemel açıklama: sınıflandırıcı için 295 µm ile 5 µm aynı şeydir (ikisi de "sağlam"); eğitim sırasında aşınmanın ne kadar ilerlediği bilgisi atılmaktadır. Regresyon bu bilgiyi kullanmaktadır.
 
-**Görülmemiş malzemede hiçbir model naif tabanı geçememektedir** (naif 0,693, en iyi model 0,692). Bu, regresyon tarafındaki bulgunun sınıflandırma karşılığıdır.
+**Görülmemiş malzemede hiçbir model naif tabanı geçememektedir** (naif 0,693, en iyi model 0,692). Regresyon katmanında sensör içeren modeller naif tabanı hâlâ geçebiliyordu (Bölüm 5.2); çıktı ikili karara indirgendiğinde bu üstünlük kaybolmaktadır. Regresyondaki zayıflama, sınıflandırmada naif tabanın altına düşmeye dönüşmektedir.
 
 ### 5.5 Karar kuralı ve eşik ayarı
 
@@ -258,7 +258,7 @@ Varsayılan eşik (300 µm, aşınma sınırı) ayarlanmamış bir karar kuralı
 
 Eşik ayarı, kaçırılan aşınmayı vaka-dışı protokolde **sıfıra**, koşul-dışı protokolde **bire** indirmektedir. Seçilen eşiklerin üçü de sınırın altındadır (272 / 258 / 237) ve genelleme zorlaştıkça düşmektedir; bu, modelin sistematik olarak eksik tahmin ettiğinin ve karar kuralının bunu güvenli tarafa telafi ettiğinin göstergesidir.
 
-**Görülmemiş malzemede karar kuralı hiçbir kazanç sağlamamaktadır** (maliyet 154 → 154). Eşiği düşürmek bir kaçırmayı kurtarmakta, karşılığında beş yanlış alarm getirmektedir; 5:1 maliyet oranında bu tam olarak başabaştır. Modelin o protokoldeki hatası, eşik oynatmakla telafi edilemeyecek kadar büyüktür. Bu, Bölüm 5.2'deki bulgunun karar katmanındaki karşılığıdır.
+**Görülmemiş malzemede karar kuralı hiçbir kazanç sağlamamaktadır** (maliyet 154 → 154). Eşiği düşürmek bir kaçırmayı kurtarmakta, karşılığında beş yanlış alarm getirmektedir; 5:1 maliyet oranında bu tam olarak başabaştır. Modelin o protokoldeki hatası, eşik oynatmakla telafi edilemeyecek kadar büyüktür: eşik mevcut bilgiyi kaçırma ile yanlış alarm arasında yeniden dağıtır, yeni bilgi üretmez. Bölüm 5.2 ve 5.4'te zayıflayarak ilerleyen sinyal, karar katmanında da güçlendirilememektedir.
 
 **Ardışık onay (histerezis) işe yaramamıştır.** İç seçim her katlamada k = 1 vermiştir; tahminler zaten düzgün ilerlediği için gürültü bastırmaya ihtiyaç yoktur.
 
@@ -297,7 +297,7 @@ Malzeme-dışı protokolde aynı model, aynı veri, yalnızca farklı başlangı
 | Eğitim süresi (koşul-dışı) | 6,7 s | 1102,1 s |
 | Oran | — | **164×** |
 
-Süreler makine yüküne bağlıdır ve çalıştırmadan çalıştırmaya değişir; mertebe (yüzlerce kat) değişmemektedir.
+Süreler makine yüküne bağlıdır ve çalıştırmadan çalıştırmaya değişir; mertebe (yüz kat üzeri) değişmemektedir.
 
 **Karar: teslim edilen model GBM'dir.** Gerekçe: (a) derin modelin üstünlüğü teslim senaryosuna karşılık gelen protokolde ölçülememiştir; (b) MAE'deki kazanç alarm davranışına yansımamaktadır (overshoot 150,00 → 151,25); (c) 164 kat maliyet artışı bu kazanç karşılığında gerekçelendirilememektedir; (d) ağaç tabanlı model öznitelik önemleri üzerinden yorumlanabilirdir.
 
@@ -387,7 +387,9 @@ Faz 04 kusuru özellikle öğreticidir, çünkü **sonucu iyileştiriyordu** (MA
 
 Aynı ilke raporun tamamına uygulanmıştır: kayıtlı bir sonuç dosyasına dayanmayan hiçbir sayı bırakılmamıştır. Bu gereklilik nedeniyle üç analiz sonradan betiklere taşınmıştır — eşik taramasındaki takım ömrü israfı sütunları, Faz 02 korelasyon özeti ve derin öğrenmede tohum başına MAE değerleri.
 
-**Test kapsamı.** Proje 164 otomatik test içermektedir. Bunların bir kısmı yukarıdaki kusurlara karşı yazılmış regresyon testleridir; amaç aynı hatanın tekrar ortaya çıkmasını engellemektir. Buna ek olarak `scripts/check_report_numbers.py`, bu rapordaki 160 sayıyı kayıtlı sonuç dosyalarıyla otomatik karşılaştırmaktadır.
+**Test kapsamı.** Proje 164 otomatik test içermektedir. Bunların bir kısmı yukarıdaki kusurlara karşı yazılmış regresyon testleridir; amaç aynı hatanın tekrar ortaya çıkmasını engellemektir. Buna ek olarak `scripts/check_report_numbers.py` ve `scripts/check_staj_raporu.py`, bu raporun ve depo belgelerinin sayılarını kayıtlı sonuç dosyalarıyla otomatik karşılaştırmaktadır.
+
+**Otomatik denetimin sınırı.** Bu raporun bir taslağında, görülmemiş malzemede "üç katmanda da naif tabanın geçilemediği" ileri sürülmüştü. Sayıların hepsi doğruydu ve denetimden temiz geçiyordu; yanlış olan, o sayılardan çıkarılan yorumdu — regresyon katmanında sensör içeren modeller naif tabanı **geçmektedir**. Denetim bunu yakalayamazdı, çünkü yaptığı iş sayıların kaynağını doğrulamaktır, onlardan çıkarılan iddiaları değil. Sayı doğrulaması ile muhakeme doğrulaması ayrı işlerdir; ikincisi hâlâ okumayı gerektirmektedir.
 
 ---
 
@@ -423,15 +425,17 @@ Metodolojik sonuçlar:
 
 En önemli sonuç olumsuzdur ve doğrudan uygulamayı ilgilendirir: **sistem, hiç görmediği bir malzemede güvenilir değildir ve bu durumu kendisi tespit edemez.**
 
-Bu sonucun ağırlığı, tek bir ölçümden değil, sistemin **üç ayrı katmanında bağımsız olarak doğrulanmış olmasından** gelmektedir:
+Bu sonucun ağırlığı, tek bir ölçümden değil, sistemin **üç katmanında da izlenebilmesinden** gelmektedir:
 
 | Katman | Görülmemiş malzemede sonuç |
 |---|---|
-| **Regresyon** (Bölüm 5.2) | En iyi model 271,5 µm; naif taban 308,96 µm. Parametre tabanlı model naif tabanın **altına** düşmektedir (388,2). |
+| **Regresyon** (Bölüm 5.2) | Sensör içeren modeller naif tabanı geçmektedir (216,9–271,5 µm; naif taban 308,96 µm), ancak hata bilinen koşullara göre yaklaşık 1,7 kat artmaktadır (vaka-dışına göre 1,55× ve 1,96×). Parametre + süre kümesi naif tabanın **altına** düşmektedir (388,2). |
 | **Sınıflandırma** (Bölüm 5.4) | Hiçbir model naif tabanı geçememektedir (naif 0,693; en iyi model 0,692). |
 | **Karar kuralı** (Bölüm 5.5) | Eşik ayarı hiçbir kazanç sağlamamaktadır (maliyet 154 → 154). Bir kaçırma kurtarmak beş yanlış alarma mal olmakta; 5:1 oranında tam başabaş. |
 
-Üç katmanın üçünde de aynı duvara çarpılmaktadır. Bu, sorunun bir model seçimi ya da eşik ayarı meselesi olmadığını, **eğitim verisinde bulunmayan bir malzemeye ilişkin bilginin sistemde hiç var olmadığını** göstermektedir. Alt katmanda olmayan bilgi üst katmanda telafi edilememektedir.
+Buradaki engel **mutlak değil, kademelidir** ve kademelenmenin yönü anlamlıdır. Regresyon katmanında sensör bilgisi hâlâ iş görmekte, model naif tabanın üstünde kalmakta ama belirgin biçimde zayıflamaktadır. Aynı çıktı ikili karara indirgendiğinde geriye kalan bilgi naif tabanın üstüne çıkmaya artık yetmemektedir. Karar eşiğini oynatmak da bu kaybı telafi etmemektedir; çünkü eşik yalnızca mevcut bilgiyi yeniden dağıtır, yeni bilgi üretmez.
+
+Yani sorun bir model seçimi ya da eşik ayarı meselesi değildir: **görülmemiş malzemeye ilişkin bilgi sistemde zayıf biçimde vardır ve karara dönüşecek kadar güçlü değildir.** Alt katmanda zayıflayan sinyal üst katmanlarda güçlendirilememektedir.
 
 Buna, sistemin kapsam dışında olduğunu sinyalden anlayamaması eklenmektedir (%71,7, çoğunluk tabanı %67,6): model yalnızca yanılmakla kalmamakta, yanıldığını da fark edememektedir. Kapsam kontrolünün metadata'ya dayandırılmasının sebebi budur.
 

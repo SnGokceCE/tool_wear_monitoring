@@ -240,13 +240,31 @@ def main(argv: list[str] | None = None) -> int:
 
     b1_mat = b1[b1["sinav"] == "malzeme-dışı"].set_index("model")
     SONUC = "## 9. Sonuç"
-    add_prose("sonuç · en iyi regresyon (malzeme-dışı)",
-              f"{b1_mat.loc['4 · sensör + parametre + süre', 'mae_um']:.1f} µm".replace(".", ","),
-              SONUC)
+    b1_vaka = b1[b1["sinav"] == "vaka-dışı"].set_index("model")
+
+    # Sensör içeren modellerin malzeme-dışı aralığı. Bir taslakta bu aralığın
+    # üst ucu ("en iyi model 271,5") yanlışlıkla EN İYİ diye sunulmuştu; en iyi
+    # sonuç aslında alt uçtaki sensör kümesidir. Denetim artık iki ucu da
+    # ayrı ayrı doğruluyor.
+    sensor_rows = ["1 · sadece sensör", "3 · sensör + parametre",
+                   "4 · sensör + parametre + süre"]
+    best = min(float(b1_mat.loc[r, "mae_um"]) for r in sensor_rows)
+    worst = max(float(b1_mat.loc[r, "mae_um"]) for r in sensor_rows)
+    add_prose("sonuç · sensörlü en iyi (malzeme-dışı)",
+              f"{best:.1f}".replace(".", ","), SONUC)
+    add_prose("sonuç · sensörlü en kötü (malzeme-dışı)",
+              f"{worst:.1f}".replace(".", ","), SONUC)
     add_prose("sonuç · naif taban (malzeme-dışı)",
               f"{b1_mat.loc['0 · naif taban', 'mae_um']:.2f}".replace(".", ","), SONUC)
     add_prose("sonuç · parametre modeli çöküşü",
               f"{b1_mat.loc['2 · parametre + süre', 'mae_um']:.1f}".replace(".", ","), SONUC)
+
+    # Bozulma oranları: malzeme-dışı / vaka-dışı.
+    for row, name in [("1 · sadece sensör", "sensör"),
+                      ("4 · sensör + parametre + süre", "sensör+parametre+süre")]:
+        ratio = float(b1_mat.loc[row, "mae_um"]) / float(b1_vaka.loc[row, "mae_um"])
+        add_prose(f"sonuç · bozulma oranı ({name})",
+                  f"{ratio:.2f}×".replace(".", ","), SONUC)
 
     cls_mat = cls[cls["sinav"] == "malzeme-dışı"]
     naive_acc = float(cls_mat[cls_mat["yöntem"] == "0 · naif (koşu no + eşik)"]["balanced_acc"].iloc[0])

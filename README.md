@@ -444,9 +444,16 @@ kullanıyor; sınıflandırıcı ise "295 µm" ile "5 µm" arasındaki farkı g�
 ikisi de sadece "unworn".
 
 **2. Görülmemiş malzemede hiçbir model naif tabanı geçemiyor.** Naif 0,693;
-en iyi model 0,692. Bu, Model B-1'deki regresyon bulgusunun sınıflandırma
-karşılığı ve **alüminyum uyarısının en net kanıtı**: sistem hiç görmediği bir
-malzemede güvenilir değil.
+en iyi model 0,692.
+
+Dikkat: bu, **sınıflandırma katmanı** için geçerli. Regresyonda durum farklı —
+Model B-1'de sensör içeren kümeler görülmemiş malzemede naif tabanı geçiyor
+(216,9–271,5 vs 308,96), yalnızca `parametre + süre` altına düşüyor (388,2).
+Yani sinyal orada hâlâ iş görüyor, ama ikili karara indirgendiğinde geriye
+kalan bilgi naif tabanın üstüne çıkmaya yetmiyor.
+
+Bu ayrım **alüminyum uyarısının en net kanıtı**: sistem hiç görmediği bir
+malzemede karar üretecek kadar güvenilir değil.
 
 **3. Karar eşiği henüz ayarlanmadı.** Hem A'da (VB eşiği) hem B'de (olasılık
 eşiği) varsayılan değerler kullanılıyor. Kaçırılan aşınma yanlış alarmdan
