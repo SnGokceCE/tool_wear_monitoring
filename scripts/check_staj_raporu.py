@@ -206,6 +206,79 @@ def main(argv: list[str] | None = None) -> int:
     package = json.loads((REPORTS / "model_b1_package.json").read_text(encoding="utf-8"))
     active = float(package["decision"]["threshold_um"])
 
+    # ------------------------------------------------------ metin içi sayılar
+    #
+    # Bazı sayılar tabloda değil, cümlenin içinde geçiyor (özet, sonuç bölümü).
+    # Tablo denetimi bunları görmez. Beklenen değer CSV'den türetilip metinde
+    # aranır: değer değişirse dizge bulunamaz ve uyuşmazlık olarak raporlanır.
+    text = document.read_text(encoding="utf-8")
+    prose: list[tuple[str, str, str]] = []
+
+    def section_text(heading: str) -> str:
+        """Belgenin yalnızca o bölümünü döndürür.
+
+        KRİTİK: arama belge geneline yapılırsa denetim yer belirtemez. Aynı
+        sayı birden çok bölümde geçiyorsa (örneğin "en iyi model 0,692" hem
+        5.4'te hem 9'da), bir kopyanın bozulması diğeri sayesinde fark
+        edilmez. Bu kusur denetimin kendi negatif sınamasında yakalanmıştır.
+        """
+        start = text.find(heading)
+        if start < 0:
+            return ""
+        level = len(heading) - len(heading.lstrip("#"))
+        rest = text[start + len(heading):]
+        end = len(rest)
+        for candidate in range(level, 0, -1):
+            marker = "\n" + "#" * candidate + " "
+            position = rest.find(marker)
+            if position >= 0:
+                end = min(end, position)
+        return rest[:end]
+
+    def add_prose(label: str, needle: str, heading: str) -> None:
+        prose.append((label, needle, heading))
+
+    b1_mat = b1[b1["sinav"] == "malzeme-dışı"].set_index("model")
+    SONUC = "## 9. Sonuç"
+    add_prose("sonuç · en iyi regresyon (malzeme-dışı)",
+              f"{b1_mat.loc['4 · sensör + parametre + süre', 'mae_um']:.1f} µm".replace(".", ","),
+              SONUC)
+    add_prose("sonuç · naif taban (malzeme-dışı)",
+              f"{b1_mat.loc['0 · naif taban', 'mae_um']:.2f}".replace(".", ","), SONUC)
+    add_prose("sonuç · parametre modeli çöküşü",
+              f"{b1_mat.loc['2 · parametre + süre', 'mae_um']:.1f}".replace(".", ","), SONUC)
+
+    cls_mat = cls[cls["sinav"] == "malzeme-dışı"]
+    naive_acc = float(cls_mat[cls_mat["yöntem"] == "0 · naif (koşu no + eşik)"]["balanced_acc"].iloc[0])
+    best_acc = float(cls_mat[cls_mat["yöntem"] != "0 · naif (koşu no + eşik)"]["balanced_acc"].max())
+    add_prose("sonuç · sınıflandırma naif", f"naif {naive_acc:.3f}".replace(".", ","), SONUC)
+    add_prose("sonuç · sınıflandırma en iyi",
+              f"en iyi model {best_acc:.3f}".replace(".", ","), SONUC)
+
+    dec_mat = dec[dec["sinav"] == "malzeme-dışı"].set_index("kural")
+    cost_fixed = dec_mat.loc["sabit eşik (= sınır)", "maliyet"]
+    cost_tuned = dec_mat.loc["ayarlı eşik", "maliyet"]
+    add_prose("sonuç · karar kuralı başabaş",
+              f"maliyet {cost_fixed:.0f} → {cost_tuned:.0f}", SONUC)
+
+    material = load("model_b1_extras")
+    material = material[material["analiz"] == "malzeme_tahmini"]
+    honest = float(material[material["sinav"] == "koşul bazında"]["deger"].iloc[0])
+    baseline = float(material[material["sinav"] == "koşul bazında"]["referans"].iloc[0])
+    add_prose("kapsam · malzeme tahmini", f"%{100 * honest:.1f}".replace(".", ","),
+              "### 6.2 Kapsam-dışı uyarısı")
+    add_prose("kapsam · çoğunluk tabanı", f"%{100 * baseline:.1f}".replace(".", ","),
+              "### 6.2 Kapsam-dışı uyarısı")
+
+    add_prose("naif taban MAE", f"MAE {naive['mae_um'].mean():.2f} µm".replace(".", ","),
+              "### 4.4 Naif taban çizgisi")
+
+    deep_vaka = deep[(deep["sinav"] == "vaka-dışı") & (deep["model"] == "CNN + GRU")]
+    add_prose("derin · vaka-dışı ortalama ± saçılım",
+              f"{float(deep_vaka['mae_um'].iloc[0]):.2f} ± "
+              f"{float(deep_vaka['mae_std'].iloc[0]):.2f} µm".replace(".", ","),
+              "### 5.6 Derin öğrenme (1B-CNN + GRU)")
+
     # -------------------------------------------------------------- çalıştır
     print("STAJ RAPORU SAYILARI DENETİMİ")
     print("=" * 78)
@@ -232,8 +305,20 @@ def main(argv: list[str] | None = None) -> int:
         elif args.verbose:
             print(f"  ✓ {label:58s} {raw!r:>14}  ≈ {expected:.4f}")
 
+    for label, needle, heading in prose:
+        checked += 1
+        scope = section_text(heading)
+        if not scope:
+            missing.append(f"{label}: bölüm bulunamadı ({heading})")
+            checked -= 1
+        elif needle not in scope:
+            failures.append(
+                f"{label}: {heading} içinde bulunamadı -> beklenen {needle!r}")
+        elif args.verbose:
+            print(f"  ✓ {label:52s} {heading[:22]:24s} {needle!r}")
+
     print("-" * 78)
-    print(f"Karşılaştırılan : {checked}")
+    print(f"Karşılaştırılan : {checked}  (tablo + metin içi)")
     print(f"Uyuşmazlık      : {len(failures)}")
     print(f"Bulunamayan     : {len(missing)}")
 

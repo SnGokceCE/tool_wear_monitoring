@@ -245,6 +245,8 @@ Dengeli doğruluk:
 
 Varsayılan eşik (300 µm, aşınma sınırı) ayarlanmamış bir karar kuralıdır. Eşik, her katlamanın **içinde** ikinci bir çapraz doğrulama ile, yalnızca eğitim verisi kullanılarak seçilmiştir; test kümesi eşik seçimine hiç karışmamaktadır.
 
+**Girdi kümesi: parametre + süre.** Bu bölüm karar katmanının kendisini ölçmektedir; model olarak Bölüm 5.2'nin bilinen koşullarda en iyi kümesi kullanılmıştır. Teslim edilen modelin (sensör + parametre + süre) eşik kalibrasyonu ayrıca yapılmıştır ve Bölüm 6.1'de verilmektedir (222 µm).
+
 | Protokol | Kural | Kaçırılan | Yanlış alarm | Seçilen eşik | Maliyet |
 |---|---|---:|---:|---:|---:|
 | vaka-dışı | sabit (300) | 4 | 13 | 300,0 | 33 |
@@ -278,8 +280,11 @@ Tohum başına sonuçlar (µm):
 
 | Protokol | Tohum 42 | Tohum 43 | Tohum 44 |
 |---|---:|---:|---:|
+| vaka-dışı | *kaydedilmemiştir* | | |
 | koşul-dışı | 136,2 | 126,3 | 150,9 |
 | malzeme-dışı | 249,9 | 231,1 | 275,8 |
+
+Vaka-dışı protokolün tohum başına değerleri, tohum kaydı özelliği eklenmeden önceki bir çalıştırmadan geldiği için kayıtlı değildir; o satır için yalnızca ortalama ve saçılım (123,53 ± 2,12 µm) raporlanabilmektedir. Kayıtsız bir sayıyı rapora yazmamak, Bölüm 7'de tarif edilen ilkenin gereğidir.
 
 Malzeme-dışı protokolde aynı model, aynı veri, yalnızca farklı başlangıç ağırlıkları ile sonuç GBM'in (257,65) iki yanına savrulmaktadır. O protokolde yalnızca 2 katlama bulunması bunun yapısal sebebidir.
 
@@ -406,7 +411,7 @@ Bu çalışmada CNC frezeleme için uçtan uca çalışan bir takım aşınması
 
 Niceliksel sonuçlar:
 
-- Bilinen kesme koşullarında karar kuralı ayarlandığında **kaçırılan aşınmış takım sayısı sıfıra** inmektedir.
+- Karar kuralı ayarlandığında kaçırılan aşınmış takım sayısı, aynı ayarlarla yeni bir takım senaryosunda (vaka-dışı) **sıfıra**, denenmemiş bir kesme koşulunda (koşul-dışı) **bire** inmektedir.
 - Sensör verisi, geçiş sayısına dayalı naif tabanın ötesine sınırlı bilgi katmaktadır (eğilim çıkarılmış korelasyon tavanı 0,30); asıl kazanç doğrulukta değil, alarm zamanlamasının güvenli tarafa kaymasındadır.
 - Derin öğrenme, bilinen koşullarda GBM'i tohum saçılımının üstünde bir farkla geçmektedir (%13,7), ancak 164 kat maliyetle ve teslim senaryosunda ölçülebilir üstünlük olmadan.
 
@@ -416,7 +421,21 @@ Metodolojik sonuçlar:
 - İki veri setinin birleştirilmesi denenmiş, ölçülmüş ve **reddedilmiştir**. Bu tür olumsuz sonuçların literatürde nadiren raporlanması, alandaki iyimserlik yanlılığının kaynaklarından biridir.
 - Sonuç tablolarını üreten kod durumuna bağlamayan bir çalışma düzeni, zamanla rapor ile kod arasında sessiz ayrışma üretmektedir. Bu çalışmada iki yönde de gözlenmiş ve künye altyapısıyla kapatılmıştır.
 
-En önemli sonuç olumsuzdur ve doğrudan uygulamayı ilgilendirir: **sistem, hiç görmediği bir malzemede güvenilir değildir ve bu durumu kendisi tespit edemez.** Hedef üretim ortamında alüminyum işlendiği ve eldeki hiçbir veri seti alüminyum içermediği için, sistemin oraya doğrudan taşınması önerilmemektedir.
+En önemli sonuç olumsuzdur ve doğrudan uygulamayı ilgilendirir: **sistem, hiç görmediği bir malzemede güvenilir değildir ve bu durumu kendisi tespit edemez.**
+
+Bu sonucun ağırlığı, tek bir ölçümden değil, sistemin **üç ayrı katmanında bağımsız olarak doğrulanmış olmasından** gelmektedir:
+
+| Katman | Görülmemiş malzemede sonuç |
+|---|---|
+| **Regresyon** (Bölüm 5.2) | En iyi model 271,5 µm; naif taban 308,96 µm. Parametre tabanlı model naif tabanın **altına** düşmektedir (388,2). |
+| **Sınıflandırma** (Bölüm 5.4) | Hiçbir model naif tabanı geçememektedir (naif 0,693; en iyi model 0,692). |
+| **Karar kuralı** (Bölüm 5.5) | Eşik ayarı hiçbir kazanç sağlamamaktadır (maliyet 154 → 154). Bir kaçırma kurtarmak beş yanlış alarma mal olmakta; 5:1 oranında tam başabaş. |
+
+Üç katmanın üçünde de aynı duvara çarpılmaktadır. Bu, sorunun bir model seçimi ya da eşik ayarı meselesi olmadığını, **eğitim verisinde bulunmayan bir malzemeye ilişkin bilginin sistemde hiç var olmadığını** göstermektedir. Alt katmanda olmayan bilgi üst katmanda telafi edilememektedir.
+
+Buna, sistemin kapsam dışında olduğunu sinyalden anlayamaması eklenmektedir (%71,7, çoğunluk tabanı %67,6): model yalnızca yanılmakla kalmamakta, yanıldığını da fark edememektedir. Kapsam kontrolünün metadata'ya dayandırılmasının sebebi budur.
+
+Hedef üretim ortamında alüminyum işlendiği ve eldeki hiçbir veri seti alüminyum içermediği için, sistemin oraya doğrudan taşınması önerilmemektedir. Bölüm 10'daki ilk maddede tarif edilen kısmi ince ayar deneyi, bu engeli aşmanın ölçülebilir tek yoludur.
 
 ## 10. Gelecek çalışma
 
