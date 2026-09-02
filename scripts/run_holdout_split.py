@@ -114,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         rows.extend(_run_deep_split(
             config, data, limit, seed, cost_missed, cost_false,
             n_seeds=args.seeds, epochs=args.epochs, modes=modes,
+            detail=args.detail,
         ))
 
     table = pd.DataFrame(rows)
@@ -285,7 +286,8 @@ def _run_split(data, columns, mode, limit, seed, cost_missed, cost_false,
 
 
 def _run_deep_split(config, data, limit, seed, cost_missed, cost_false,
-                    n_seeds: int, epochs: int, modes: list[str]) -> list[dict]:
+                    n_seeds: int, epochs: int, modes: list[str],
+                    detail: bool = False) -> list[dict]:
     """Aynı bölmede 1B-CNN + GRU.
 
     LightGBM kolundan iki farkı var:
@@ -385,6 +387,11 @@ def _run_deep_split(config, data, limit, seed, cost_missed, cost_false,
         print(f"  Yakalama oranı        : {scores['worn_recall'] * 100:.1f}%  "
               f"(kaçırılan {int(scores['missed_worn'])}/{int(worn.sum())})")
         print(f"  Yanlış alarm          : {int(scores['false_alarms'])}")
+
+        if detail:
+            # Tahmin olarak tohumların ORTALAMASI kullanılıyor; tek bir
+            # tohumun dökümü rastgele başlangıca bağlı olurdu.
+            _print_detail(test, truth, mean_pred, flags, worn, threshold, scores)
 
         results.append({
             "bolme": ("takım bazlı" if mode == "tool" else "rastgele") + " · CNN+GRU",
