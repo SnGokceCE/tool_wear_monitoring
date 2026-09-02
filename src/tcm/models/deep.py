@@ -135,11 +135,20 @@ def train_model(
     weight_decay: float = 1e-3,
     seed: int = 42,
     verbose: bool = False,
+    validation: tuple | None = None,
+    patience: int = 20,
 ):
-    """Modeli eğitir. Küçük veri için sabit epoch, yüksek weight decay.
+    """Modeli eğitir.
 
-    Erken durdurma yok: ayıracak kadar doğrulama verisi yok. Bunun yerine
-    kapasite küçük tutuldu ve düzenlileştirme yükseltildi.
+    ``validation`` verilmezse sabit ``epochs`` kadar eğitilir. Çapraz
+    doğrulama kurgusunda durum budur: her katlamada ayıracak kadar veri yok,
+    onun yerine kapasite küçük tutulur ve düzenlileştirme yükseltilir.
+
+    ``validation`` verilirse (``(sinyal, parametre, hedef)`` üçlüsü) her
+    epoch sonunda doğrulama MAE'si ölçülür, en iyi ağırlıklar saklanır ve
+    ``patience`` epoch boyunca iyileşme olmazsa eğitim durdurulup **en iyi
+    ağırlıklara geri dönülür**. Son epoch'un ağırlıkları değil, en iyisi
+    döndürülür - aksi halde erken durdurmanın anlamı kalmaz.
     """
     require_torch()
     torch.manual_seed(seed)
@@ -159,8 +168,19 @@ def train_model(
     n = len(y)
     generator = torch.Generator().manual_seed(seed)
 
-    model.train()
+    validation_tensors = None
+    if validation is not None:
+        v_signal, v_param, v_target = validation
+        validation_tensors = (
+            torch.tensor(v_signal, dtype=torch.float32, device=device),
+            torch.tensor(v_param, dtype=torch.float32, device=device),
+            torch.tensor(v_target, dtype=torch.float32, device=device),
+        )
+
+    best_loss, best_state, best_epoch, waited = float("inf"), None, 0, 0
+
     for epoch in range(epochs):
+        model.train()
         order = torch.randperm(n, generator=generator)
         total = 0.0
         for start in range(0, n, batch_size):
@@ -176,6 +196,28 @@ def train_model(
 
         if verbose and (epoch + 1) % 20 == 0:
             print(f"    epoch {epoch + 1:3d}  kayıp {total / n:8.2f}")
+
+        if validation_tensors is None:
+            continue
+
+        model.eval()
+        with torch.no_grad():
+            v_signal, v_param, v_target = validation_tensors
+            v_mae = float(torch.mean(torch.abs(
+                model(v_signal, v_param) - v_target)).item())
+
+        if v_mae < best_loss - 1e-9:
+            best_loss, best_epoch, waited = v_mae, epoch + 1, 0
+            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        else:
+            waited += 1
+            if waited >= patience:
+                break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        model.best_epoch_ = best_epoch
+        model.best_validation_mae_ = best_loss
 
     return model
 

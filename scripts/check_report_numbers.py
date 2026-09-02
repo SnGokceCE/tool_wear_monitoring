@@ -474,15 +474,26 @@ def main(argv: list[str] | None = None) -> int:
     holdout_path = REPORTS / "holdout_split_summary.csv"
     if holdout_path.exists():
         holdout = pd.read_csv(holdout_path)
+        # Belgelerdeki tablo iki anahtarlı: (bölme, model). CSV'de tek
+        # sütunda birleşik ("takım bazlı · CNN+GRU"), o yüzden ayrıştırılıyor.
+        holdout_rows = {}
+        for name in holdout["bolme"]:
+            if " · " in name:
+                split_name, model_name = name.split(" · ", 1)
+            else:
+                split_name, model_name = name, "LightGBM"
+            holdout_rows[name] = (split_name, model_name)
+
         for column, readme_column in [
-            ("agac", "Ağaç"), ("esik_um", "Eşik (µm)"),
+            ("agac", "Ağaç/epoch"), ("esik_um", "Eşik (µm)"),
             ("test_mae_um", "Test MAE"), ("test_rmse_um", "Test RMSE"),
             ("worn_recall", "Yakalama"), ("missed_worn", "Kaçırılan"),
             ("false_alarms", "Yanlış alarm"),
         ]:
             check_table(result, tables, csv=holdout, key_column="bolme",
                         value_column=column, readme_column=readme_column,
-                        label="Faz 12 bölme", verbose=args.verbose)
+                        label="Faz 12 bölme", rows=holdout_rows,
+                        verbose=args.verbose)
 
         sweep_path = REPORTS / "holdout_tree_sweep.csv"
         if sweep_path.exists():

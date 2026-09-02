@@ -194,15 +194,21 @@ def main(argv: list[str] | None = None) -> int:
 
     # ------------------------------------------------------- Faz 12 bölme
     holdout = load("holdout_split_summary")
+    # Rapordaki tablo iki anahtarlı: (bölme, model). CSV'de tek sütunda
+    # birleşik ("takım bazlı · CNN+GRU"), o yüzden ayrıştırılıyor.
     for column, report_column in [
-        ("agac", "Ağaç"), ("esik_um", "Eşik (µm)"),
+        ("agac", "Ağaç/epoch"), ("esik_um", "Eşik (µm)"),
         ("test_mae_um", "Test MAE"), ("test_rmse_um", "Test RMSE"),
         ("worn_recall", "Yakalama"), ("missed_worn", "Kaçırılan"),
         ("false_alarms", "Yanlış alarm"),
     ]:
         for row in holdout.itertuples(index=False):
+            if " · " in row.bolme:
+                key = list(row.bolme.split(" · ", 1))
+            else:
+                key = [row.bolme, "LightGBM"]
             add(f"Faz 12 · {row.bolme} · {report_column}",
-                row.bolme, report_column, getattr(row, column))
+                key, report_column, getattr(row, column))
 
     tree = load("holdout_tree_sweep")
     for row in tree.itertuples(index=False):

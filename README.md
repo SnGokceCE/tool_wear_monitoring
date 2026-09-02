@@ -735,16 +735,50 @@ Karşılaştırma için satır bazlı rastgele bölme de çalıştırıldı.
 
 ### Sonuç
 
-| Bölme | Ağaç | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| takım bazlı | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
-| rastgele | 133 | 207,0 | **114,94** | **166,32** | **1,000** | 0 | 7 |
+Aynı bölmede iki model çalıştırıldı: **LightGBM** ve **1B-CNN+GRU**. Derin
+model üç tohumla tekrarlandı (tohum saçılımı Faz 05'te ±2–18 µm ölçülmüştü,
+tek koşuya güvenilmiyor).
 
-**Rastgele bölme %30 daha iyi görünüyor — ve sorun tam olarak budur.** O
-kurguda 15 takımın 14'ü hem eğitimde hem testte. Aynı takımın komşu koşuları
-neredeyse aynı sinyali taşıdığı için model, test satırlarına çok benzeyen
-satırları eğitimde görmüş oluyor. Bu sayı genellemeyi değil ezberi ölçüyor.
-Betik bu durumu otomatik tespit edip uyarı basıyor.
+| Bölme | Model | Ağaç/epoch | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| takım bazlı | LightGBM | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
+| takım bazlı | **CNN+GRU** | 130 | **257,0** | **117,70** | **150,22** | **0,727** | **3** | 0 |
+| rastgele | LightGBM | 133 | 207,0 | **114,94** | 166,32 | 1,000 | 0 | 7 |
+| rastgele | CNN+GRU | 170 | 164,0 | 121,05 | 184,54 | 1,000 | 0 | 11 |
+
+Derin modelin tohum başına test MAE'si (takım bazlı): 116,9 / 121,7 / 118,5 →
+**119,02 ± 1,99 µm**. Saçılım, GBM ile arasındaki 46 µm'lik farkın çok
+altında; yani bu fark gürültüden değil.
+
+**Rastgele bölme LightGBM'de %30 daha iyi görünüyor — ve sorun tam olarak
+budur.** O kurguda 15 takımın 14'ü hem eğitimde hem testte. Aynı takımın komşu
+koşuları neredeyse aynı sinyali taşıdığı için model, test satırlarına çok
+benzeyen satırları eğitimde görmüş oluyor. Bu sayı genellemeyi değil ezberi
+ölçüyor. Betik bu durumu otomatik tespit edip uyarı basıyor.
+
+### CNN+GRU'nun LightGBM'i geçmesi ne anlama geliyor — ve ne anlama gelmiyor
+
+Takım bazlı bölmede derin model açık ara önde (117,70 vs 164,33) ve daha çok
+aşınma yakalıyor (8/11 vs 6/11). Ama bu, **"derin öğrenme daha iyi model"
+demek değil.** Ağaç taraması gösteriyor ki LightGBM 600 ağaçla 105,04 yapıyor —
+yani CNN+GRU'yu da geçiyor.
+
+Fark modelin kendisinden değil, **erken durdurmanın nasıl davrandığından**
+geliyor:
+
+| | Doğrulamanın seçtiği | Sonuç |
+|---|---|---|
+| LightGBM | **10 ağaç** | felç; her girdiye 280–460 arası bir sayı diyor |
+| CNN+GRU | 113 / 158 / 118 epoch | makul; öğrenme tamamlanmış |
+
+Aynı zayıf doğrulama kümesi (2 takım, 20 koşu) iki modeli farklı derecede
+bozdu. Eşik kalibrasyonunda da aynı örüntü var: derin modelin eşiği **257 µm**,
+yani aşınma sınırının **altında** — Faz 09'da beklenen doğru yön. LightGBM'in
+eşiği 402 µm, sınırın üstünde, yani güvensiz tarafta.
+
+**Doğru okuma:** bu deney iki modeli kıyaslamıyor, **küçük doğrulama kümesinin
+model seçimini ne kadar bozabildiğini** gösteriyor. LightGBM o bozulmadan çok
+daha fazla zarar gördü.
 
 ### Asıl bulgu: 20 satırlık doğrulama kümesi modeli bozdu
 
@@ -778,17 +812,19 @@ tahminleri daha aşağıda oturduğu için beş aşınmayı birden kaçırıyor.
 
 ### Precision 1,000 iyi haber değil
 
-| Metrik | Değer |
-|---|---:|
-| Precision | 1,000 |
-| Recall | 0,545 |
-| F1 | 0,706 |
-| Balanced accuracy | 0,773 |
+| Metrik | LightGBM | CNN+GRU |
+|---|---:|---:|
+| Precision | 1,000 | 1,000 |
+| Recall | 0,545 | **0,727** |
+| Balanced accuracy | 0,773 | **0,864** |
+| Kaçırılan | 5 | **3** |
+| Yanlış alarm | 0 | 0 |
 
-Precision mükemmel çünkü eşik o kadar yüksek ki model neredeyse hiç alarm
-vermiyor; verdiği az sayıda alarm doğru çıkıyor. Asıl sayı **recall 0,545** —
-11 aşınmış koşunun 5'i kaçırıldı. Takım aşınmasında kaçırılan aşınma (FN),
-yanlış alarmdan (FP) çok daha pahalıdır.
+Her iki modelde de precision 1,000 — ama bu bir başarı göstergesi değildir.
+Eşikler o kadar yüksektir ki modeller nadiren alarm vermekte, verdikleri az
+sayıda alarm doğru çıkmaktadır. Asıl sayı **recall**'dır: LightGBM 11 aşınmış
+koşunun 5'ini, CNN+GRU 3'ünü kaçırmıştır. Takım aşınmasında kaçırılan aşınma
+(FN), yanlış alarmdan (FP) çok daha pahalıdır.
 
 Satır satır döküm için `--detail` kullanın; test kümesindeki her koşunun
 gerçek/tahmin değeri ve TP/FN/FP/TN durumu basılır.

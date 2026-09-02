@@ -41,6 +41,13 @@ from tcm.cli import setup_console
 from tcm.decision import alarm_cost, alarm_flags, choose_threshold
 from tcm.evaluation.classification import classification_scores
 from tcm.evaluation.metrics import summarise
+from tcm.models.deep import (
+    CNNGRUWearModel,
+    SignalStandardiser,
+    predict,
+    require_torch,
+    train_model,
+)
 from tcm.models.gbm import SMALL_DATA_PARAMS
 from tcm.provenance import format_stamp, run_stamp
 from tcm.serving import resolve_feature_columns
@@ -51,6 +58,11 @@ VALIDATION_CASES = (3, 5)
 
 TARGET_SIZES = {"eğitim": 100, "doğrulama": 20, "test": 25}
 
+# Derin modele giren kesme parametreleri (evrişimden geçmez, GRU
+# çıktısına eklenir). Sensör öznitelikleri yok - ağ ham sinyalden
+# kendi çıkarımını yapıyor.
+DEEP_PARAMETERS = ["material", "feed", "doc", "rpm", "cum_time"]
+
 
 def main(argv: list[str] | None = None) -> int:
     setup_console()
@@ -60,6 +72,12 @@ def main(argv: list[str] | None = None) -> int:
                         choices=["sensor+param+time", "param+time"])
     parser.add_argument("--split", default="both",
                         choices=["tool", "random", "both"])
+    parser.add_argument("--model", default="gbm",
+                        choices=["gbm", "deep", "both"],
+                        help="gbm = LightGBM, deep = 1B-CNN+GRU")
+    parser.add_argument("--seeds", type=int, default=3,
+                        help="derin model kaç tohumla tekrarlanacak")
+    parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--detail", action="store_true",
                         help="test kümesinin satır satır tahminlerini ve "
                              "karışıklık matrisini bas")
@@ -86,9 +104,17 @@ def main(argv: list[str] | None = None) -> int:
 
     modes = ["tool", "random"] if args.split == "both" else [args.split]
     rows = []
-    for mode in modes:
-        rows.append(_run_split(data, columns, mode, limit, seed,
-                               cost_missed, cost_false, detail=args.detail))
+
+    if args.model in ("gbm", "both"):
+        for mode in modes:
+            rows.append(_run_split(data, columns, mode, limit, seed,
+                                   cost_missed, cost_false, detail=args.detail))
+
+    if args.model in ("deep", "both"):
+        rows.extend(_run_deep_split(
+            config, data, limit, seed, cost_missed, cost_false,
+            n_seeds=args.seeds, epochs=args.epochs, modes=modes,
+        ))
 
     table = pd.DataFrame(rows)
     _print_comparison(table, modes)
@@ -129,8 +155,19 @@ def _split_by_tool(data: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 
 def _split_random(data: pd.DataFrame, seed: int) -> dict[str, pd.DataFrame]:
-    """Satır bazlı rastgele bölme - takım sınırı gözetilmez."""
-    shuffled = data.sample(frac=1.0, random_state=seed).reset_index(drop=True)
+    """Satır bazlı rastgele bölme - takım sınırı gözetilmez.
+
+    DİKKAT: indeks SIFIRLANMAZ. Derin model kolu, ham sinyal dizisine
+    (``nasa_signals.npy``) satır indeksiyle erişiyor; indeks sıfırlanırsa o
+    erişim yanlış satırları çeker ve sinyaller etiketlerle eşleşmez.
+
+    Bu gerçekten oldu: ``reset_index(drop=True)`` yüzünden derin model
+    rastgele bölmede 308 µm MAE verdi. Sebep modelin başarısızlığı değil,
+    bölmenin sessizce başka bir bölmeye dönüşmesiydi - eğitim ilk 100
+    satırı, test son 25 satırı alıyordu (tablo takıma göre sıralı olduğu
+    için bu aslında bir takım bölmesidir).
+    """
+    shuffled = data.sample(frac=1.0, random_state=seed)
     n_train, n_validation = TARGET_SIZES["eğitim"], TARGET_SIZES["doğrulama"]
     return {
         "eğitim": shuffled.iloc[:n_train],
@@ -245,6 +282,148 @@ def _run_split(data, columns, mode, limit, seed, cost_missed, cost_false,
         "maliyet": alarm_cost(worn, flags, cost_missed, cost_false),
     }
 
+
+
+def _run_deep_split(config, data, limit, seed, cost_missed, cost_false,
+                    n_seeds: int, epochs: int, modes: list[str]) -> list[dict]:
+    """Aynı bölmede 1B-CNN + GRU.
+
+    LightGBM kolundan iki farkı var:
+
+      1. Girdi ham sinyal (6 kanal x 4500 örnek) artı kesme parametreleri.
+         Öznitelikleri biz tanımlamıyoruz.
+      2. Tek koşuya güvenilmiyor. Sinir ağında ağırlık başlangıcı rastgele;
+         bu veri ölçeğinde tohumlar arası saçılım model farkından büyük
+         olabiliyor (Bölüm 5.6'da ±10-18 µm ölçüldü). Bu yüzden deney
+         ``n_seeds`` tohumla tekrarlanıp ortalama VE saçılım raporlanıyor.
+
+    Doğrulama kümesi burada da iki iş yapıyor: erken durdurma (en iyi epoch)
+    ve alarm eşiği kalibrasyonu.
+    """
+    require_torch()
+
+    signals = _load_signals(config, data)
+    parameters = data[DEEP_PARAMETERS].to_numpy(dtype=np.float32)
+    targets = data["vb_um"].to_numpy(dtype=np.float32)
+
+    results = []
+    for mode in modes:
+        parts = _split_by_tool(data) if mode == "tool" else _split_random(data, seed)
+        idx = {name: part.index.to_numpy() for name, part in parts.items()}
+        test = parts["test"]
+        validation = parts["doğrulama"]
+
+        print("\n" + "=" * 84)
+        label = "TAKIM BAZLI" if mode == "tool" else "RASTGELE (satır bazlı)"
+        print(f"CNN + GRU · BÖLME: {label}  ({n_seeds} tohum, {epochs} epoch)")
+        print("=" * 84)
+
+        # Sinyal ve parametre standardizasyonu YALNIZCA eğitim kümesinden.
+        standardiser = SignalStandardiser()
+        x = {k: standardiser.fit_transform(signals[v]) if k == "eğitim"
+             else standardiser.transform(signals[v]) for k, v in idx.items()}
+
+        mean = parameters[idx["eğitim"]].mean(axis=0)
+        std = parameters[idx["eğitim"]].std(axis=0)
+        std[std < 1e-9] = 1.0
+        p = {k: (parameters[v] - mean) / std for k, v in idx.items()}
+        y = {k: targets[v] for k, v in idx.items()}
+
+        per_seed, epochs_used, thresholds = [], [], []
+        test_predictions = []
+
+        for offset in range(n_seeds):
+            current = seed + offset
+            model = CNNGRUWearModel(
+                n_channels=signals.shape[1], n_parameters=len(DEEP_PARAMETERS)
+            )
+            model = train_model(
+                model, x["eğitim"], p["eğitim"], y["eğitim"],
+                epochs=epochs, seed=current,
+                validation=(x["doğrulama"], p["doğrulama"], y["doğrulama"]),
+                patience=25,
+            )
+            epochs_used.append(getattr(model, "best_epoch_", epochs))
+
+            val_pred = predict(model, x["doğrulama"], p["doğrulama"])
+            threshold = choose_threshold(
+                y["doğrulama"].astype(float), val_pred.astype(float), limit,
+                cost_missed=cost_missed, cost_false_alarm=cost_false,
+                groups=validation["case"].to_numpy(),
+            )
+            thresholds.append(threshold)
+
+            prediction = predict(model, x["test"], p["test"]).astype(float)
+            test_predictions.append(prediction)
+            per_seed.append(float(np.mean(np.abs(prediction - y["test"]))))
+
+            print(f"  tohum {current}: en iyi epoch {epochs_used[-1]:3d}  "
+                  f"eşik {threshold:6.1f}  test MAE {per_seed[-1]:7.2f}")
+
+        mean_pred = np.mean(test_predictions, axis=0)
+        threshold = float(np.mean(thresholds))
+        truth = y["test"].astype(float)
+
+        flags = alarm_flags(mean_pred, threshold, 1, test["case"].to_numpy())
+        worn = truth >= limit
+        scores = classification_scores(worn, flags)
+
+        overshoots = []
+        for case in sorted(test["case"].unique()):
+            mask = (test["case"] == case).to_numpy()
+            order = np.argsort(test.loc[mask, "run"].to_numpy())
+            overshoots.append(summarise(
+                truth[mask][order], mean_pred[mask][order], limit)["overshoot_um"])
+
+        mae = float(np.mean(np.abs(mean_pred - truth)))
+        spread = float(np.std(per_seed))
+
+        print(f"\n  Tohum başına test MAE : "
+              f"{'  '.join(f'{v:.1f}' for v in per_seed)}")
+        print(f"  Ortalama ± saçılım    : {np.mean(per_seed):.2f} ± {spread:.2f} µm")
+        print(f"  Ortalama tahminle MAE : {mae:.2f} µm")
+        print(f"  Yakalama oranı        : {scores['worn_recall'] * 100:.1f}%  "
+              f"(kaçırılan {int(scores['missed_worn'])}/{int(worn.sum())})")
+        print(f"  Yanlış alarm          : {int(scores['false_alarms'])}")
+
+        results.append({
+            "bolme": ("takım bazlı" if mode == "tool" else "rastgele") + " · CNN+GRU",
+            "n_egitim": len(parts["eğitim"]), "n_dogrulama": len(validation),
+            "n_test": len(test),
+            "agac": float(np.mean(epochs_used)),      # burada epoch sayısı
+            "esik_um": threshold,
+            "test_mae_um": mae,
+            "test_rmse_um": float(np.sqrt(np.mean((mean_pred - truth) ** 2))),
+            "test_abs_overshoot_um": float(np.mean(np.abs(overshoots))),
+            "worn_recall": scores["worn_recall"],
+            "missed_worn": scores["missed_worn"],
+            "false_alarms": scores["false_alarms"],
+            "balanced_acc": scores["balanced_acc"],
+            "maliyet": alarm_cost(worn, flags, cost_missed, cost_false),
+            "tohum_sayisi": n_seeds,
+            "tohum_maeleri": ";".join(f"{v:.4f}" for v in per_seed),
+            "mae_std": spread,
+        })
+
+    return results
+
+
+def _load_signals(config, data) -> np.ndarray:
+    """Ham sinyal önbelleğini okur ve tablo sırasına hizalar."""
+    cache = config.path("paths.data_processed") / "nasa_signals.npy"
+    if not cache.exists():
+        raise SystemExit(
+            f"Sinyal önbelleği yok: {cache}\n"
+            "Önce çalıştırın: python scripts/run_model_deep.py --protocols "
+            '"malzeme-dışı" --seeds 1'
+        )
+    signals = np.load(cache)
+    if len(signals) != len(data):
+        raise SystemExit(
+            f"Önbellek {len(signals)} örnek içeriyor ama tablo {len(data)} satır. "
+            "Önbellek bayat; --rebuild ile yenileyin."
+        )
+    return signals
 
 
 def _tree_sweep(data, columns, limit, seed) -> pd.DataFrame:

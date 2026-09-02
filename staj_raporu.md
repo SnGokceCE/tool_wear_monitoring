@@ -309,12 +309,18 @@ Bölüm 4.2'de bölmenin neden takım bazında ve çapraz doğrulamayla yapıld�
 
 145 koşu, takım bazında bölündüğünde hedeflenen boyutları tam tutturmaktadır: eğitim 100 koşu (11 takım), doğrulama 20 koşu (takım 3 ve 5), test 25 koşu (takım 8 ve 11). Doğrulama kümesi iki iş yapmaktadır — erken durdurma ile ağaç sayısını, maliyet fonksiyonu ile alarm eşiğini belirlemek. Test kümesi yalnızca en sonda bir kez kullanılmıştır. Karşılaştırma için satır bazlı rastgele bölme de çalıştırılmıştır.
 
-| Bölme | Ağaç | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| takım bazlı | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
-| rastgele | 133 | 207,0 | **114,94** | **166,32** | **1,000** | 0 | 7 |
+Aynı bölmede iki model çalıştırılmıştır: LightGBM ve Bölüm 5.6'daki 1B-CNN+GRU mimarisi. Derin model üç tohumla tekrarlanmıştır.
 
-**Rastgele bölme %30 daha iyi görünmektedir ve sorun tam olarak budur.** O kurguda 15 takımın 14'ü hem eğitimde hem testtedir; aynı takımın komşu koşuları neredeyse aynı sinyali taşıdığı için model, test satırlarına çok benzeyen satırları eğitimde görmüş olmaktadır. Ölçülen şey genelleme değil ezberdir. Bu, Bölüm 4.2'de gerekçe olarak sunulan sızıntının niceliksel karşılığıdır.
+| Bölme | Model | Ağaç/epoch | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| takım bazlı | LightGBM | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
+| takım bazlı | **CNN+GRU** | 130 | **257,0** | **117,70** | **150,22** | **0,727** | **3** | 0 |
+| rastgele | LightGBM | 133 | 207,0 | **114,94** | 166,32 | 1,000 | 0 | 7 |
+| rastgele | CNN+GRU | 170 | 164,0 | 121,05 | 184,54 | 1,000 | 0 | 11 |
+
+Derin modelin tohum başına test MAE'si (takım bazlı) 116,9 / 121,7 / 118,5 µm, ortalama ± saçılım **119,02 ± 1,99 µm**'dir. Saçılım, LightGBM ile arasındaki 46 µm'lik farkın çok altındadır; fark gürültüden kaynaklanmamaktadır.
+
+**Rastgele bölme LightGBM'de %30 daha iyi görünmektedir ve sorun tam olarak budur.** O kurguda 15 takımın 14'ü hem eğitimde hem testtedir; aynı takımın komşu koşuları neredeyse aynı sinyali taşıdığı için model, test satırlarına çok benzeyen satırları eğitimde görmüş olmaktadır. Ölçülen şey genelleme değil ezberdir. Bu, Bölüm 4.2'de gerekçe olarak sunulan sızıntının niceliksel karşılığıdır.
 
 **Asıl bulgu doğrulama kümesindedir.** Ağaç sayısı tarandığında doğrulama ve test hataları zıt yönlere gitmektedir:
 
@@ -330,9 +336,18 @@ Erken durdurma doğrulama hatasını izlediği için 10 ağaç seçmiştir — t
 
 Aynı yetersizlik eşik kalibrasyonunda da görülmektedir: seçilen eşik **402 µm**, yani aşınma sınırının (300 µm) **üstünde**. Bölüm 5.5'te çapraz doğrulamayla kalibre edilen eşikler sınırın altında çıkmıştı (272 / 258 / 237); model sistematik olarak eksik tahmin ettiği için doğru yön aşağıdır. 402 değeri doğrulama kümesinde optimaldir, ancak test takımlarında beş aşınmayı birden kaçırmaktadır.
 
-Sınıflandırma metrikleri bu durumu özetlemektedir: precision 1,000, recall 0,545, F1 0,706. Precision'ın mükemmel olması bir başarı göstergesi değildir — eşik o kadar yüksektir ki model neredeyse hiç alarm vermemekte, verdiği az sayıda alarm doğru çıkmaktadır. Anlamlı olan recall'dır ve 11 aşınmış koşunun 5'i kaçırılmıştır.
+Sınıflandırma tarafında her iki modelin de precision değeri 1,000'dir; bu bir başarı göstergesi değildir. Eşikler o kadar yüksektir ki modeller nadiren alarm vermekte, verdikleri az sayıda alarm doğru çıkmaktadır. Anlamlı olan recall'dır: LightGBM 11 aşınmış koşunun 5'ini, CNN+GRU 3'ünü kaçırmıştır (dengeli doğruluk 0,773 ve 0,864).
 
-**Sonuç:** bu veri ölçeğinde sabit bölme yalnızca daha gürültülü bir tahmin vermemekte, model seçimini ve eşik kalibrasyonunu aktif olarak yanlış yöne çekmektedir. Çapraz doğrulama tercihi böylece varsayım olmaktan çıkıp ölçülmüş bir gerekçeye dayanmaktadır.
+**CNN+GRU'nun öne geçmesi model üstünlüğü olarak okunmamalıdır.** Ağaç taraması, LightGBM'in 600 ağaçla 105,04 µm yaptığını — yani derin modeli de geçtiğini — göstermektedir. Fark modellerin kendisinden değil, aynı zayıf doğrulama kümesinin ikisini farklı derecede bozmasından kaynaklanmaktadır:
+
+| Model | Doğrulamanın seçtiği | Sonuç |
+|---|---|---|
+| LightGBM | 10 ağaç | Felç; her girdiye 280–460 arası bir değer vermektedir |
+| CNN+GRU | 113 / 158 / 118 epoch | Makul; öğrenme tamamlanmıştır |
+
+Aynı örüntü eşik kalibrasyonunda da görülmektedir: derin modelin eşiği 257 µm ile aşınma sınırının **altında** kalmakta (Bölüm 5.5'te beklenen doğru yön), LightGBM'inki 402 µm ile üstüne çıkmaktadır.
+
+**Sonuç:** bu veri ölçeğinde sabit bölme yalnızca daha gürültülü bir tahmin vermemekte, model seçimini ve eşik kalibrasyonunu aktif olarak yanlış yöne çekmektedir. Bozulmanın derecesi modele göre değişmekte, dolayısıyla bu kurguda ölçülen model karşılaştırmaları da güvenilir olmamaktadır. Çapraz doğrulama tercihi böylece varsayım olmaktan çıkıp ölçülmüş bir gerekçeye dayanmaktadır.
 
 ---
 

@@ -6,12 +6,13 @@ Rapor (`staj_raporu.md`) ve `README.md`, kayıtlı sonuç dosyalarıyla makineyl
 doğrulanmış durumda. Kayıtsız sayı kalmadı.
 
 ```bash
-python scripts/check_report_numbers.py   # README  - 184 sayı
-python scripts/check_staj_raporu.py      # rapor   - 167 sayı
+python scripts/check_report_numbers.py   # README  - 198 sayı
+python scripts/check_staj_raporu.py      # rapor   - 181 sayı
 ```
 
 **Faz 12** (sabit 100/20/25 bölme deneyi) README'ye ve rapora (§5.7)
-eklendi, ikisinin de denetim kapsamında. Teslim edilen sistemi değiştirmez; çapraz doğrulama
+eklendi, ikisi de denetim kapsamında. Deney LightGBM ve CNN+GRU ile
+ayrı ayrı çalıştırıldı. 175 test. Teslim edilen sistemi değiştirmez; çapraz doğrulama
 tercihinin deneysel gerekçesidir.
 
 ---
