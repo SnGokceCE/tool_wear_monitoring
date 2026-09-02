@@ -117,7 +117,14 @@ def main(argv: list[str] | None = None) -> int:
             detail=args.detail,
         ))
 
-    table = pd.DataFrame(rows)
+    # İki model de çalıştıysa, aynı test satırlarını yan yana bas.
+    if args.model == "both" and args.detail:
+        for mode in modes:
+            _print_joint_detail(data, rows, mode, limit)
+
+    table = pd.DataFrame([
+        {k: v for k, v in row.items() if not k.startswith("_")} for row in rows
+    ])
     _print_comparison(table, modes)
 
     sweep = None
@@ -281,6 +288,13 @@ def _run_split(data, columns, mode, limit, seed, cost_missed, cost_false,
         "false_alarms": scores["false_alarms"],
         "balanced_acc": scores["balanced_acc"],
         "maliyet": alarm_cost(worn, flags, cost_missed, cost_false),
+        # Alt çizgiyle başlayan anahtarlar ortak dökümde kullanılıyor;
+        # CSV'ye yazılmadan önce ayıklanıyorlar.
+        "_model": "LightGBM",
+        "_mode": mode,
+        "_pred": test_pred,
+        "_threshold": threshold,
+        "_index": test.index.to_numpy(),
     }
 
 
@@ -410,6 +424,11 @@ def _run_deep_split(config, data, limit, seed, cost_missed, cost_false,
             "tohum_sayisi": n_seeds,
             "tohum_maeleri": ";".join(f"{v:.4f}" for v in per_seed),
             "mae_std": spread,
+            "_model": "CNN+GRU",
+            "_mode": mode,
+            "_pred": mean_pred,
+            "_threshold": threshold,
+            "_index": test.index.to_numpy(),
         })
 
     return results
@@ -549,6 +568,87 @@ def _print_detail(test, truth, pred, flags, worn, threshold, scores) -> None:
     print("\n  Not: üretimde precision ile recall eşit önemde değildir. Kaçırılan")
     print("  aşınma (FN) parçayı hurdaya çıkarır; yanlış alarm (FP) yalnızca takım")
     print("  ömrü israf eder. Bu yüzden asıl bakılan recall'dır.")
+
+
+def _print_joint_detail(data, rows, mode, limit) -> None:
+    """İki modelin aynı test satırlarındaki tahminlerini yan yana basar.
+
+    Ayrı ayrı basılan dökümler karşılaştırmayı zorlaştırıyordu: hangi koşuda
+    hangi modelin yanıldığını görmek için iki tabloyu göz kararı hizalamak
+    gerekiyordu. Bu tablo ikisini tek satırda birleştiriyor.
+
+    Her modelin kendi alarm eşiği var (doğrulama kümesinden ayrı ayrı
+    kalibre edildi), o yüzden eşikler başlıkta ayrı ayrı yazılıyor.
+    """
+    selected = [r for r in rows if r.get("_mode") == mode]
+    if len(selected) < 2:
+        return
+
+    by_model = {r["_model"]: r for r in selected}
+    if not {"LightGBM", "CNN+GRU"} <= set(by_model):
+        return
+
+    gbm, cnn = by_model["LightGBM"], by_model["CNN+GRU"]
+    index = gbm["_index"]
+    test = data.loc[index]
+    truth = test["vb_um"].to_numpy(dtype=float)
+    worn = truth >= limit
+
+    groups = test["case"].to_numpy()
+    gbm_flags = alarm_flags(gbm["_pred"], gbm["_threshold"], 1, groups)
+    cnn_flags = alarm_flags(cnn["_pred"], cnn["_threshold"], 1, groups)
+
+    def status(is_worn, has_alarm):
+        if is_worn:
+            return "TP" if has_alarm else "FN"
+        return "FP" if has_alarm else "TN"
+
+    label = "TAKIM BAZLI" if mode == "tool" else "RASTGELE"
+    print("\n" + "=" * 100)
+    print(f"ORTAK DÖKÜM - {label}  |  test {len(test)} koşu")
+    print(f"aşınma sınırı {limit:.0f} µm  ·  "
+          f"LightGBM eşiği {gbm['_threshold']:.0f} µm  ·  "
+          f"CNN+GRU eşiği {cnn['_threshold']:.0f} µm")
+    print("=" * 100)
+
+    frame = pd.DataFrame({
+        "takım": test["case"].astype(int).to_numpy(),
+        "koşu": test["run"].astype(int).to_numpy(),
+        "süre": test["cum_time"].to_numpy(),
+        "gerçek": truth,
+        "GBM tahmin": gbm["_pred"],
+        "GBM hata": gbm["_pred"] - truth,
+        "GBM": [status(bool(w), bool(f)) for w, f in zip(worn, gbm_flags)],
+        "CNN tahmin": cnn["_pred"],
+        "CNN hata": cnn["_pred"] - truth,
+        "CNN": [status(bool(w), bool(f)) for w, f in zip(worn, cnn_flags)],
+        "aşınmış": np.where(worn, "evet", "hayır"),
+    })
+    print(frame.to_string(index=False, float_format=lambda v: f"{v:8.1f}"))
+
+    def counts(flags):
+        return (int(np.sum(worn & flags)), int(np.sum(worn & ~flags)),
+                int(np.sum(~worn & flags)), int(np.sum(~worn & ~flags)))
+
+    g_tp, g_fn, g_fp, g_tn = counts(gbm_flags)
+    c_tp, c_fn, c_fp, c_tn = counts(cnn_flags)
+
+    print(f"""
+  Model      TP   FN   FP   TN   recall     MAE
+  LightGBM  {g_tp:3d}  {g_fn:3d}  {g_fp:3d}  {g_tn:3d}    {g_tp / max(g_tp + g_fn, 1):.3f}  {np.mean(np.abs(gbm['_pred'] - truth)):6.2f}
+  CNN+GRU   {c_tp:3d}  {c_fn:3d}  {c_fp:3d}  {c_tn:3d}    {c_tp / max(c_tp + c_fn, 1):.3f}  {np.mean(np.abs(cnn['_pred'] - truth)):6.2f}""")
+
+    differing = [i for i in range(len(truth))
+                 if status(bool(worn[i]), bool(gbm_flags[i]))
+                 != status(bool(worn[i]), bool(cnn_flags[i]))]
+    if differing:
+        print(f"\n  İki modelin AYRIŞTIĞI {len(differing)} koşu:")
+        for i in differing:
+            print(f"    takım {int(test['case'].iloc[i])} koşu {int(test['run'].iloc[i]):2d}  "
+                  f"gerçek {truth[i]:6.1f}  |  GBM {gbm['_pred'][i]:6.1f} "
+                  f"{status(bool(worn[i]), bool(gbm_flags[i]))}  |  "
+                  f"CNN {cnn['_pred'][i]:6.1f} "
+                  f"{status(bool(worn[i]), bool(cnn_flags[i]))}")
 
 
 def _print_comparison(table: pd.DataFrame, modes: list[str]) -> None:
