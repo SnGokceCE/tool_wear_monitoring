@@ -470,6 +470,36 @@ def main(argv: list[str] | None = None) -> int:
                            float(getattr(row, column)) * scale, tol, raw)
             result.note(table, label, readme_column)
 
+    # ---------------------------------------------------- Faz 12 sabit bölme
+    holdout_path = REPORTS / "holdout_split_summary.csv"
+    if holdout_path.exists():
+        holdout = pd.read_csv(holdout_path)
+        for column, readme_column in [
+            ("agac", "Ağaç"), ("esik_um", "Eşik (µm)"),
+            ("test_mae_um", "Test MAE"), ("test_rmse_um", "Test RMSE"),
+            ("worn_recall", "Yakalama"), ("missed_worn", "Kaçırılan"),
+            ("false_alarms", "Yanlış alarm"),
+        ]:
+            check_table(result, tables, csv=holdout, key_column="bolme",
+                        value_column=column, readme_column=readme_column,
+                        label="Faz 12 bölme", verbose=args.verbose)
+
+        sweep_path = REPORTS / "holdout_tree_sweep.csv"
+        if sweep_path.exists():
+            tree = pd.read_csv(sweep_path)
+            tree = tree.assign(agac_etiket=tree["agac"].map(lambda v: f"{v:.0f}"))
+            for column, readme_column in [
+                ("dogrulama_mae_um", "Doğrulama MAE"),
+                ("test_mae_um", "Test MAE"),
+            ]:
+                check_table(result, tables, csv=tree, key_column="agac_etiket",
+                            value_column=column, readme_column=readme_column,
+                            label="Faz 12 ağaç taraması", verbose=args.verbose)
+    else:
+        result.missing.append(
+            "Faz 12: holdout_split_summary.csv yok - "
+            "`python scripts/run_holdout_split.py --save` çalıştırın")
+
     # ---------------------------------------------------- Faz 02 korelasyon
     #
     # Raporun en güçlü metodolojik iddiası ("0,30 tavanı") buradan geliyor.

@@ -23,6 +23,7 @@ Yol haritası: https://claude.ai/code/artifact/395988f2-9463-43ae-b252-62984fe32
 | 09 | Karar mantığı — alarm eşiği | **tamamlandı** |
 | 10 | Sağlamlaştırma ve paketleme | — |
 | 11 | Rapor ve sunum | — |
+| 12 | Sabit 100/20/25 bölme deneyi | **tamamlandı** |
 
 ## Sonuçların kaynağı (provenance)
 
@@ -48,6 +49,7 @@ sütunu taşır.
 | Faz 06 · teslim modeli | `reports/model_b1_package.json`, `reports/model_b1_baselines.csv` | `python scripts/train_model.py` |
 | Faz 06 · eşik taraması | `reports/threshold_sweep.csv` | `python scripts/threshold_sweep.py --save` |
 | Faz 09 · karar kuralı | `reports/decision_rule_summary.csv` | `python scripts/run_decision_rule.py --save` |
+| Faz 12 · sabit bölme | `reports/holdout_split_summary.csv`, `reports/holdout_tree_sweep.csv` | `python scripts/run_holdout_split.py --save` |
 
 ### Künye denetimi (31 Ağustos 2026)
 
@@ -702,6 +704,94 @@ hiçbir noktada karışmaz.
 **Ardışık onay (histerezis) işe yaramadı:** iç seçim her katlamada k = 1 seçti.
 Tahminler zaten düzgün ilerlediği için (`cum_time` monoton) gürültü bastırmaya
 ihtiyaç yok.
+
+## Faz 12 — sabit 100/20/25 bölmesi (1 Eylül 2026)
+
+`python scripts/run_holdout_split.py --detail`
+
+Projenin geri kalanı çapraz doğrulama kullanıyor. Bu bölüm, **klasik
+eğitim/doğrulama/test bölmesini** aynı veri üzerinde deneyip ne olduğunu
+ölçüyor. Amaç yeni bir model üretmek değil; çapraz doğrulama tercihinin
+gerekçesini tahmin olmaktan çıkarıp **ölçüme** dayandırmak.
+
+Teslim edilen sistem bu deneyden etkilenmedi — Faz 06 paketi olduğu gibi
+duruyor.
+
+### Bölme
+
+145 koşu, takım bazında bölündüğünde 100/20/25'i tam tutturuyor:
+
+| Küme | Takımlar | Koşu |
+|---|---|---:|
+| Eğitim | 1, 2, 4, 7, 9, 10, 12, 13, 14, 15, 16 | 100 |
+| Doğrulama | 3, 5 | 20 |
+| Test | 8, 11 | 25 |
+
+Doğrulama kümesi iki iş yapıyor, ikisi de test kümesine dokunmadan: **erken
+durdurma** (kaç ağaç kurulacağı) ve **alarm eşiği kalibrasyonu**. Test yalnızca
+en sonda, bir kez kullanılıyor.
+
+Karşılaştırma için satır bazlı rastgele bölme de çalıştırıldı.
+
+### Sonuç
+
+| Bölme | Ağaç | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| takım bazlı | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
+| rastgele | 133 | 207,0 | **114,94** | **166,32** | **1,000** | 0 | 7 |
+
+**Rastgele bölme %30 daha iyi görünüyor — ve sorun tam olarak budur.** O
+kurguda 15 takımın 14'ü hem eğitimde hem testte. Aynı takımın komşu koşuları
+neredeyse aynı sinyali taşıdığı için model, test satırlarına çok benzeyen
+satırları eğitimde görmüş oluyor. Bu sayı genellemeyi değil ezberi ölçüyor.
+Betik bu durumu otomatik tespit edip uyarı basıyor.
+
+### Asıl bulgu: 20 satırlık doğrulama kümesi modeli bozdu
+
+Ağaç sayısı taranınca doğrulama ve test **zıt yönleri** gösteriyor:
+
+| Ağaç | Doğrulama MAE | Test MAE |
+|---:|---:|---:|
+| 10 | **151,84** | 164,33 |
+| 50 | 166,75 | 120,86 |
+| 100 | 185,45 | 110,84 |
+| 300 | 207,13 | 107,43 |
+| 600 | 212,85 | **105,04** |
+
+Erken durdurma doğrulama hatasına baktığı için **10 ağaç** seçti — test için
+mümkün olan en kötü seçim. 600 ağaçla test MAE'si 164 yerine 105 olacaktı.
+
+Sebep: doğrulama kümesi yalnızca 2 takımdan (20 koşu) oluşuyor ve o iki takımın
+aşınma davranışı test takımlarınınkine benzemiyor. **Sabit bölme bu veri
+ölçeğinde sadece daha gürültülü bir tahmin vermiyor; aktif olarak yanlış model
+seçiyor.**
+
+### Yan etki: eşik güvensiz tarafa kaydı
+
+Seçilen alarm eşiği **402 µm** — aşınma sınırının (300) *üstünde*. Faz 09'da
+doğru kalibre edilmiş eşikler sınırın altında çıkmıştı (272 / 258 / 237), çünkü
+model sistematik olarak eksik tahmin ediyor.
+
+402'nin sebebi doğrulama kümesinde optimal olması: orada hiç aşınma
+kaçırmadan yanlış alarmı 1'e indiriyor. Ama test takımlarında modelin
+tahminleri daha aşağıda oturduğu için beş aşınmayı birden kaçırıyor.
+
+### Precision 1,000 iyi haber değil
+
+| Metrik | Değer |
+|---|---:|
+| Precision | 1,000 |
+| Recall | 0,545 |
+| F1 | 0,706 |
+| Balanced accuracy | 0,773 |
+
+Precision mükemmel çünkü eşik o kadar yüksek ki model neredeyse hiç alarm
+vermiyor; verdiği az sayıda alarm doğru çıkıyor. Asıl sayı **recall 0,545** —
+11 aşınmış koşunun 5'i kaçırıldı. Takım aşınmasında kaçırılan aşınma (FN),
+yanlış alarmdan (FP) çok daha pahalıdır.
+
+Satır satır döküm için `--detail` kullanın; test kümesindeki her koşunun
+gerçek/tahmin değeri ve TP/FN/FP/TN durumu basılır.
 
 ## Yol boyunca yanlış çıkan şeyler
 
