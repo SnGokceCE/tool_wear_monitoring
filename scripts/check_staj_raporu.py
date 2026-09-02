@@ -217,6 +217,25 @@ def main(argv: list[str] | None = None) -> int:
             row.dogrulama_mae_um)
         add(f"Faz 12 ağaç · {label} · test", label, "Test MAE", row.test_mae_um)
 
+    # Ortak döküm - rapordaki satır satır tablo
+    detail_path = REPORTS / "holdout_detail.csv"
+    if detail_path.exists():
+        detail = pd.read_csv(detail_path)
+        detail = detail[detail["bolme"] == "takım bazlı"]
+        # Rapor 25 satırın temsili bir seçkisini veriyor; yalnızca belgede
+        # GERÇEKTEN bulunan satırlar denetleniyor. Aksi halde seçkiye
+        # alınmayan satırlar "bulunamadı" diye raporlanır ve gerçek
+        # eksiklikleri gölgeler.
+        # itertuples boşluklu sütun adlarını değiştirdiği için sözlük erişimi.
+        for row in detail.to_dict("records"):
+            tool, run = int(row["takım"]), int(row["koşu"])
+            key = [str(tool), str(run)]
+            if not any(tbl.has(key, "gerçek") for tbl in tables):
+                continue
+            for column in ("gerçek", "GBM tahmin", "CNN tahmin"):
+                add(f"döküm · takım {tool} koşu {run} · {column}",
+                    key, column, row[column])
+
     # ------------------------------------------------------------ korelasyon
     corr = load("correlation_summary").set_index("olcum")
     for report_row, csv_row in [

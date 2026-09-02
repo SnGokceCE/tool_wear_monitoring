@@ -7,7 +7,7 @@ doğrulanmış durumda. Kayıtsız sayı kalmadı.
 
 ```bash
 python scripts/check_report_numbers.py   # README  - 198 sayı
-python scripts/check_staj_raporu.py      # rapor   - 181 sayı
+python scripts/check_staj_raporu.py      # rapor   - 226 sayı
 ```
 
 **Faz 12** (sabit 100/20/25 bölme deneyi) README'ye ve rapora (§5.7)

@@ -742,12 +742,12 @@ tek koşuya güvenilmiyor).
 | Bölme | Model | Ağaç/epoch | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | takım bazlı | LightGBM | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
-| takım bazlı | **CNN+GRU** | 130 | **257,0** | **117,70** | **150,22** | **0,727** | **3** | 0 |
+| takım bazlı | **CNN+GRU** | 123 | **273,0** | **114,12** | **145,15** | **0,727** | **3** | 0 |
 | rastgele | LightGBM | 133 | 207,0 | **114,94** | 166,32 | 1,000 | 0 | 7 |
-| rastgele | CNN+GRU | 170 | 164,0 | 121,05 | 184,54 | 1,000 | 0 | 11 |
+| rastgele | CNN+GRU | 177 | 163,0 | 125,15 | 190,23 | 1,000 | 0 | 11 |
 
-Derin modelin tohum başına test MAE'si (takım bazlı): 116,9 / 121,7 / 118,5 →
-**119,02 ± 1,99 µm**. Saçılım, GBM ile arasındaki 46 µm'lik farkın çok
+Derin modelin tohum başına test MAE'si (takım bazlı): 123,2 / 112,0 / 116,6 →
+**117,25 ± 4,58 µm**. Saçılım, GBM ile arasındaki 50 µm'lik farkın çok
 altında; yani bu fark gürültüden değil.
 
 **Rastgele bölme LightGBM'de %30 daha iyi görünüyor — ve sorun tam olarak
@@ -769,10 +769,10 @@ geliyor:
 | | Doğrulamanın seçtiği | Sonuç |
 |---|---|---|
 | LightGBM | **10 ağaç** | felç; her girdiye 280–460 arası bir sayı diyor |
-| CNN+GRU | 113 / 158 / 118 epoch | makul; öğrenme tamamlanmış |
+| CNN+GRU | ~123 epoch (ortalama) | makul; öğrenme tamamlanmış |
 
 Aynı zayıf doğrulama kümesi (2 takım, 20 koşu) iki modeli farklı derecede
-bozdu. Eşik kalibrasyonunda da aynı örüntü var: derin modelin eşiği **257 µm**,
+bozdu. Eşik kalibrasyonunda da aynı örüntü var: derin modelin eşiği **273 µm**,
 yani aşınma sınırının **altında** — Faz 09'da beklenen doğru yön. LightGBM'in
 eşiği 402 µm, sınırın üstünde, yani güvensiz tarafta.
 

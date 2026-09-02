@@ -314,11 +314,11 @@ Aynı bölmede iki model çalıştırılmıştır: LightGBM ve Bölüm 5.6'daki 
 | Bölme | Model | Ağaç/epoch | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | takım bazlı | LightGBM | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
-| takım bazlı | **CNN+GRU** | 130 | **257,0** | **117,70** | **150,22** | **0,727** | **3** | 0 |
+| takım bazlı | **CNN+GRU** | 123 | **273,0** | **114,12** | **145,15** | **0,727** | **3** | 0 |
 | rastgele | LightGBM | 133 | 207,0 | **114,94** | 166,32 | 1,000 | 0 | 7 |
-| rastgele | CNN+GRU | 170 | 164,0 | 121,05 | 184,54 | 1,000 | 0 | 11 |
+| rastgele | CNN+GRU | 177 | 163,0 | 125,15 | 190,23 | 1,000 | 0 | 11 |
 
-Derin modelin tohum başına test MAE'si (takım bazlı) 116,9 / 121,7 / 118,5 µm, ortalama ± saçılım **119,02 ± 1,99 µm**'dir. Saçılım, LightGBM ile arasındaki 46 µm'lik farkın çok altındadır; fark gürültüden kaynaklanmamaktadır.
+Derin modelin tohum başına test MAE'si (takım bazlı) 123,2 / 112,0 / 116,6 µm, ortalama ± saçılım **117,25 ± 4,58 µm**'dir. Saçılım, LightGBM ile arasındaki 50 µm'lik farkın çok altındadır; fark gürültüden kaynaklanmamaktadır.
 
 **Rastgele bölme LightGBM'de %30 daha iyi görünmektedir ve sorun tam olarak budur.** O kurguda 15 takımın 14'ü hem eğitimde hem testtedir; aynı takımın komşu koşuları neredeyse aynı sinyali taşıdığı için model, test satırlarına çok benzeyen satırları eğitimde görmüş olmaktadır. Ölçülen şey genelleme değil ezberdir. Bu, Bölüm 4.2'de gerekçe olarak sunulan sızıntının niceliksel karşılığıdır.
 
@@ -343,9 +343,41 @@ Sınıflandırma tarafında her iki modelin de precision değeri 1,000'dir; bu b
 | Model | Doğrulamanın seçtiği | Sonuç |
 |---|---|---|
 | LightGBM | 10 ağaç | Felç; her girdiye 280–460 arası bir değer vermektedir |
-| CNN+GRU | 113 / 158 / 118 epoch | Makul; öğrenme tamamlanmıştır |
+| CNN+GRU | ~123 epoch (ortalama) | Makul; öğrenme tamamlanmıştır |
 
-Aynı örüntü eşik kalibrasyonunda da görülmektedir: derin modelin eşiği 257 µm ile aşınma sınırının **altında** kalmakta (Bölüm 5.5'te beklenen doğru yön), LightGBM'inki 402 µm ile üstüne çıkmaktadır.
+Aynı örüntü eşik kalibrasyonunda da görülmektedir: derin modelin eşiği 273 µm ile aşınma sınırının **altında** kalmakta (Bölüm 5.5'te beklenen doğru yön), LightGBM'inki 402 µm ile üstüne çıkmaktadır.
+
+#### Test kümesinin satır satır dökümü
+
+Toplu metrikler modelin **nerede** yanıldığını göstermemektedir. Aşağıdaki tablo aynı 25 test koşusunda iki modelin tahminlerini yan yana vermektedir (alarm eşikleri ayrı kalibre edildiği için farklıdır: LightGBM 402 µm, CNN+GRU 273 µm).
+
+| takım | koşu | süre | gerçek | GBM tahmin | GBM | CNN tahmin | CNN |
+|---:|---:|---:|---:|---:|---|---:|---|
+| 8 | 1 | 0 | 0,0 | 278,4 | TN | 144,8 | TN |
+| 8 | 2 | 3 | 180,0 | 278,4 | TN | 161,1 | TN |
+| 8 | 3 | 9 | 300,0 | 291,0 | **FN** | 314,2 | **TP** |
+| 8 | 5 | 18 | 440,0 | 292,8 | **FN** | 333,7 | **TP** |
+| 8 | 6 | 30 | 620,0 | 378,2 | **FN** | 348,5 | **TP** |
+| 11 | 1 | 1 | 0,0 | 269,9 | TN | 89,0 | TN |
+| 11 | 5 | 40 | 80,0 | 296,7 | TN | 136,5 | TN |
+| 11 | 9 | 105 | 160,0 | 315,7 | TN | 138,0 | TN |
+| 11 | 13 | 273 | 260,0 | 338,1 | TN | 184,8 | TN |
+| 11 | 15 | 330 | 310,0 | 352,7 | **FN** | 171,6 | **FN** |
+| 11 | 16 | 393 | 370,0 | 340,8 | **FN** | 184,1 | **FN** |
+| 11 | 18 | 465 | 420,0 | 426,0 | **TP** | 211,6 | **FN** |
+| 11 | 19 | 545 | 470,0 | 457,8 | TP | 373,8 | TP |
+| 11 | 21 | 724 | 650,0 | 415,0 | TP | 453,6 | TP |
+| 11 | 23 | 929 | 760,0 | 354,8 | TP | 425,6 | TP |
+
+*(Tablo 25 satırın temsili bir seçkisidir; tamamı `reports/holdout_detail.csv` içindedir.)*
+
+Üç gözlem öne çıkmaktadır:
+
+**Yeni takım tahmininde fark belirgindir.** Gerçek aşınmanın sıfır olduğu iki koşuda LightGBM 278,4 ve 269,9 µm demektedir; CNN+GRU 144,8 ve 89,0. LightGBM tüm girdilere dar bir bantta (280–460 µm) yanıt vermekte, yani ayırt etmemektedir.
+
+**Takım 8'de yönler tamamen ayrışmaktadır.** LightGBM o takımın üç aşınmış koşusunun üçünü de kaçırmakta, CNN+GRU üçünü de yakalamaktadır.
+
+**Ancak üstünlük tek yönlü değildir.** Takım 11'in 18. koşusunda gerçek aşınma 420 µm iken LightGBM 426 µm ile alarm vermekte (TP), CNN+GRU 211,6 µm ile kaçırmaktadır (FN). Toplamda LightGBM 6 TP / 5 FN, CNN+GRU 8 TP / 3 FN vermektedir.
 
 **Sonuç:** bu veri ölçeğinde sabit bölme yalnızca daha gürültülü bir tahmin vermemekte, model seçimini ve eşik kalibrasyonunu aktif olarak yanlış yöne çekmektedir. Bozulmanın derecesi modele göre değişmekte, dolayısıyla bu kurguda ölçülen model karşılaştırmaları da güvenilir olmamaktadır. Çapraz doğrulama tercihi böylece varsayım olmaktan çıkıp ölçülmüş bir gerekçeye dayanmaktadır.
 

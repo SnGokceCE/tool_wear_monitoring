@@ -118,9 +118,12 @@ def main(argv: list[str] | None = None) -> int:
         ))
 
     # İki model de çalıştıysa, aynı test satırlarını yan yana bas.
+    joint = {}
     if args.model == "both" and args.detail:
         for mode in modes:
-            _print_joint_detail(data, rows, mode, limit)
+            frame = _print_joint_detail(data, rows, mode, limit)
+            if frame is not None:
+                joint[mode] = frame
 
     table = pd.DataFrame([
         {k: v for k, v in row.items() if not k.startswith("_")} for row in rows
@@ -148,6 +151,11 @@ def main(argv: list[str] | None = None) -> int:
             sweep_out = target / "holdout_tree_sweep.csv"
             sweep.assign(git_hash=stamp["git_hash"]).to_csv(sweep_out, index=False)
             print(f"Kaydedildi: {sweep_out}")
+        if joint:
+            detail_out = target / "holdout_detail.csv"
+            pd.concat(joint.values(), ignore_index=True).assign(
+                git_hash=stamp["git_hash"]).to_csv(detail_out, index=False)
+            print(f"Kaydedildi: {detail_out}")
 
     return 0
 
@@ -582,11 +590,11 @@ def _print_joint_detail(data, rows, mode, limit) -> None:
     """
     selected = [r for r in rows if r.get("_mode") == mode]
     if len(selected) < 2:
-        return
+        return None
 
     by_model = {r["_model"]: r for r in selected}
     if not {"LightGBM", "CNN+GRU"} <= set(by_model):
-        return
+        return None
 
     gbm, cnn = by_model["LightGBM"], by_model["CNN+GRU"]
     index = gbm["_index"]
@@ -649,6 +657,12 @@ def _print_joint_detail(data, rows, mode, limit) -> None:
                   f"{status(bool(worn[i]), bool(gbm_flags[i]))}  |  "
                   f"CNN {cnn['_pred'][i]:6.1f} "
                   f"{status(bool(worn[i]), bool(cnn_flags[i]))}")
+
+    return frame.assign(
+        bolme="takım bazlı" if mode == "tool" else "rastgele",
+        gbm_esik=gbm["_threshold"],
+        cnn_esik=cnn["_threshold"],
+    )
 
 
 def _print_comparison(table: pd.DataFrame, modes: list[str]) -> None:
