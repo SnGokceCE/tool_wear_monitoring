@@ -192,6 +192,25 @@ def main(argv: list[str] | None = None) -> int:
         add(f"eşik · {label} · ilk geçişte", label, "İlk geçişte alarm",
             row.ilk_geciste_takim, helpers.parse_leading_number)
 
+    # ------------------------------------------------------- Faz 12 bölme
+    holdout = load("holdout_split_summary")
+    for column, report_column in [
+        ("agac", "Ağaç"), ("esik_um", "Eşik (µm)"),
+        ("test_mae_um", "Test MAE"), ("test_rmse_um", "Test RMSE"),
+        ("worn_recall", "Yakalama"), ("missed_worn", "Kaçırılan"),
+        ("false_alarms", "Yanlış alarm"),
+    ]:
+        for row in holdout.itertuples(index=False):
+            add(f"Faz 12 · {row.bolme} · {report_column}",
+                row.bolme, report_column, getattr(row, column))
+
+    tree = load("holdout_tree_sweep")
+    for row in tree.itertuples(index=False):
+        label = f"{row.agac:.0f}"
+        add(f"Faz 12 ağaç · {label} · doğrulama", label, "Doğrulama MAE",
+            row.dogrulama_mae_um)
+        add(f"Faz 12 ağaç · {label} · test", label, "Test MAE", row.test_mae_um)
+
     # ------------------------------------------------------------ korelasyon
     corr = load("correlation_summary").set_index("olcum")
     for report_row, csv_row in [

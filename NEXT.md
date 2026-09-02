@@ -7,11 +7,11 @@ doğrulanmış durumda. Kayıtsız sayı kalmadı.
 
 ```bash
 python scripts/check_report_numbers.py   # README  - 184 sayı
-python scripts/check_staj_raporu.py      # rapor   - 143 sayı
+python scripts/check_staj_raporu.py      # rapor   - 167 sayı
 ```
 
-**Faz 12** (sabit 100/20/25 bölme deneyi) README'ye eklendi ve denetim
-kapsamına alındı. Teslim edilen sistemi değiştirmez; çapraz doğrulama
+**Faz 12** (sabit 100/20/25 bölme deneyi) README'ye ve rapora (§5.7)
+eklendi, ikisinin de denetim kapsamında. Teslim edilen sistemi değiştirmez; çapraz doğrulama
 tercihinin deneysel gerekçesidir.
 
 ---

@@ -101,6 +101,8 @@ Kayan pencereleri rastgele bölmek, aynı takımın komşu geçişlerini hem eğ
 
 Üçünün birlikte raporlanması bilinçlidir: yalnızca vaka-dışı raporlansaydı sistem yaklaşık iki kat daha iyi görünürdü.
 
+Sabit bir eğitim/doğrulama/test bölmesi yerine çapraz doğrulama kullanılmasının gerekçesi Bölüm 5.7'de deneyle ölçülmüştür.
+
 ### 4.3 Metrikler
 
 - **MAE / RMSE** — VB tahmininin doğruluğu.
@@ -300,6 +302,37 @@ Malzeme-dışı protokolde aynı model, aynı veri, yalnızca farklı başlangı
 Süreler makine yüküne bağlıdır ve çalıştırmadan çalıştırmaya değişir; mertebe (yüz kat üzeri) değişmemektedir.
 
 **Karar: teslim edilen model GBM'dir.** Gerekçe: (a) derin modelin üstünlüğü teslim senaryosuna karşılık gelen protokolde ölçülememiştir; (b) MAE'deki kazanç alarm davranışına yansımamaktadır (overshoot 150,00 → 151,25); (c) 164 kat maliyet artışı bu kazanç karşılığında gerekçelendirilememektedir; (d) ağaç tabanlı model öznitelik önemleri üzerinden yorumlanabilirdir.
+
+### 5.7 Sabit bölme denemesi — değerlendirme tasarımının sınanması
+
+Bölüm 4.2'de bölmenin neden takım bazında ve çapraz doğrulamayla yapıldığı gerekçelendirilmişti. Bu bölüm o gerekçeyi **ölçüyor**: aynı veri üzerinde klasik eğitim/doğrulama/test bölmesi uygulanmış ve ne olduğu kaydedilmiştir. Amaç yeni bir model üretmek değildir; teslim edilen sistem bu denemeden etkilenmemiştir.
+
+145 koşu, takım bazında bölündüğünde hedeflenen boyutları tam tutturmaktadır: eğitim 100 koşu (11 takım), doğrulama 20 koşu (takım 3 ve 5), test 25 koşu (takım 8 ve 11). Doğrulama kümesi iki iş yapmaktadır — erken durdurma ile ağaç sayısını, maliyet fonksiyonu ile alarm eşiğini belirlemek. Test kümesi yalnızca en sonda bir kez kullanılmıştır. Karşılaştırma için satır bazlı rastgele bölme de çalıştırılmıştır.
+
+| Bölme | Ağaç | Eşik (µm) | Test MAE | Test RMSE | Yakalama | Kaçırılan | Yanlış alarm |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| takım bazlı | 10 | 402,0 | 164,33 | 192,24 | 0,545 | 5 | 0 |
+| rastgele | 133 | 207,0 | **114,94** | **166,32** | **1,000** | 0 | 7 |
+
+**Rastgele bölme %30 daha iyi görünmektedir ve sorun tam olarak budur.** O kurguda 15 takımın 14'ü hem eğitimde hem testtedir; aynı takımın komşu koşuları neredeyse aynı sinyali taşıdığı için model, test satırlarına çok benzeyen satırları eğitimde görmüş olmaktadır. Ölçülen şey genelleme değil ezberdir. Bu, Bölüm 4.2'de gerekçe olarak sunulan sızıntının niceliksel karşılığıdır.
+
+**Asıl bulgu doğrulama kümesindedir.** Ağaç sayısı tarandığında doğrulama ve test hataları zıt yönlere gitmektedir:
+
+| Ağaç | Doğrulama MAE | Test MAE |
+|---:|---:|---:|
+| 10 | **151,84** | 164,33 |
+| 50 | 166,75 | 120,86 |
+| 100 | 185,45 | 110,84 |
+| 300 | 207,13 | 107,43 |
+| 600 | 212,85 | **105,04** |
+
+Erken durdurma doğrulama hatasını izlediği için 10 ağaç seçmiştir — test açısından mümkün olan en kötü seçim. 600 ağaçla test MAE'si 164 yerine 105 olacaktı. Sebep, doğrulama kümesinin yalnızca 2 takımdan (20 koşu) oluşması ve o takımların aşınma davranışının test takımlarını temsil etmemesidir.
+
+Aynı yetersizlik eşik kalibrasyonunda da görülmektedir: seçilen eşik **402 µm**, yani aşınma sınırının (300 µm) **üstünde**. Bölüm 5.5'te çapraz doğrulamayla kalibre edilen eşikler sınırın altında çıkmıştı (272 / 258 / 237); model sistematik olarak eksik tahmin ettiği için doğru yön aşağıdır. 402 değeri doğrulama kümesinde optimaldir, ancak test takımlarında beş aşınmayı birden kaçırmaktadır.
+
+Sınıflandırma metrikleri bu durumu özetlemektedir: precision 1,000, recall 0,545, F1 0,706. Precision'ın mükemmel olması bir başarı göstergesi değildir — eşik o kadar yüksektir ki model neredeyse hiç alarm vermemekte, verdiği az sayıda alarm doğru çıkmaktadır. Anlamlı olan recall'dır ve 11 aşınmış koşunun 5'i kaçırılmıştır.
+
+**Sonuç:** bu veri ölçeğinde sabit bölme yalnızca daha gürültülü bir tahmin vermemekte, model seçimini ve eşik kalibrasyonunu aktif olarak yanlış yöne çekmektedir. Çapraz doğrulama tercihi böylece varsayım olmaktan çıkıp ölçülmüş bir gerekçeye dayanmaktadır.
 
 ---
 
