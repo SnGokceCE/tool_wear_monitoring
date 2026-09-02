@@ -511,6 +511,18 @@ def main(argv: list[str] | None = None) -> int:
             "Faz 12: holdout_split_summary.csv yok - "
             "`python scripts/run_holdout_split.py --save` çalıştırın")
 
+    # ------------------------------------------------- permütasyon önemi
+    perm_path = REPORTS / "permutation_importance.csv"
+    if perm_path.exists():
+        perm = pd.read_csv(perm_path)
+        for model in ("CNN+GRU", "LightGBM"):
+            subset = perm[perm["model"] == model]
+            rows = {r: f"`{r}`" for r in subset["parametre"]}
+            check_table(result, tables, csv=subset, key_column="parametre",
+                        value_column="onem", readme_column=model,
+                        label=f"permütasyon {model}", rows=rows,
+                        verbose=args.verbose)
+
     # ---------------------------------------------------- Faz 02 korelasyon
     #
     # Raporun en güçlü metodolojik iddiası ("0,30 tavanı") buradan geliyor.

@@ -756,6 +756,45 @@ koşuları neredeyse aynı sinyali taşıdığı için model, test satırlarına
 benzeyen satırları eğitimde görmüş oluyor. Bu sayı genellemeyi değil ezberi
 ölçüyor. Betik bu durumu otomatik tespit edip uyarı basıyor.
 
+### Derin model hangi parametreye dayanıyor — permütasyon önemi
+
+LightGBM hangi özniteliği ne kadar kullandığını kendi raporlayabiliyor
+(dallanma sayısı). CNN+GRU'da böyle bir sayaç yok — ağa ham sinyal giriyor.
+
+Ama derin modele giren **5 kesme parametresi** isimli skaler değerler; onlar
+üzerinde permütasyon önemi hesaplanabilir: test kümesinde bir parametreyi
+karıştır, MAE ne kadar arttı bak. Model yeniden eğitilmiyor.
+
+```bash
+python scripts/run_permutation_importance.py --save
+```
+
+| Parametre | CNN+GRU | LightGBM |
+|---|---:|---:|
+| **`cum_time`** | **+22,24** | +3,08 |
+| `material` | −0,21 | 0,00 |
+| `feed` | +0,16 | 0,00 |
+| `doc` | 0,00 | 0,00 |
+| `rpm` | 0,00 | 0,00 |
+
+*(Değerler µm; taban MAE CNN+GRU 115,45, LightGBM 164,33.)*
+
+**Kontrol geçti:** `rpm` NASA'da sabit (826 dev/dk), karıştırmak hiçbir şeyi
+değiştirmemeli — iki modelde de tam sıfır çıktı.
+
+**Kümülatif süre baskın, diğer dördü pratikte sıfır.** CNN+GRU için süreyi
+kaybetmek hatayı taban değerinin **%19'u** kadar artırıyor.
+
+**LightGBM'in düşük değeri yanıltıcıdır.** Ona 144 sensör özniteliği de
+giriyor ve bunların çoğu aşınmayla birlikte zaten artıyor; `cum_time`
+karıştırılınca model o bilgiyi başka sütunlardan geri toplayabiliyor.
+Permütasyon öneminin bilinen kusuru bu: ilişkili öznitelikler önemi paylaşır.
+CNN+GRU'da ise `cum_time` ayrı bir yoldan (GRU çıktısına eklenerek) giren tek
+açık zaman sinyali, yerini dolduracak yedeği yok.
+
+**Sahaya bakan sonuç:** sistemin çalışması için kümülatif kesme süresi sayacı
+zorunlu. Malzeme, ilerleme ve kesme derinliği bilgisi olmadan da çalışabilir.
+
 ### CNN+GRU'nun LightGBM'i geçmesi ne anlama geliyor — ve ne anlama gelmiyor
 
 Takım bazlı bölmede derin model açık ara önde (117,70 vs 164,33) ve daha çok

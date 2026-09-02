@@ -6,7 +6,7 @@ Rapor (`staj_raporu.md`) ve `README.md`, kayıtlı sonuç dosyalarıyla makineyl
 doğrulanmış durumda. Kayıtsız sayı kalmadı.
 
 ```bash
-python scripts/check_report_numbers.py   # README  - 198 sayı
+python scripts/check_report_numbers.py   # README  - 208 sayı
 python scripts/check_staj_raporu.py      # rapor   - 226 sayı
 ```
 
